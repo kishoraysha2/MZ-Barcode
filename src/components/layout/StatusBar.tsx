@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   Printer,
@@ -9,20 +9,43 @@ import {
   Key
 } from 'lucide-react';
 import { AppEdition } from '../../types';
+import { electronBridge } from '../../preload/bridge';
 
 interface StatusBarProps {
   edition: AppEdition;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({ edition }) => {
+  const [licenseText, setLicenseText] = useState('License: Not Configured');
+  const [isValid, setIsValid] = useState(false);
+
+  useEffect(() => {
+    async function loadLicense() {
+      try {
+        const res = await electronBridge.getLicenseStatus();
+        if (res.success && res.data?.isActivated) {
+          setLicenseText(`License: Valid (${res.data.daysRemaining} Days)`);
+          setIsValid(true);
+        } else {
+          setLicenseText('License: Not Configured');
+          setIsValid(false);
+        }
+      } catch (err) {
+        setLicenseText('License: Not Configured');
+        setIsValid(false);
+      }
+    }
+    loadLicense();
+  }, []);
+
   return (
     <footer className="h-7 bg-slate-950 border-t border-slate-800 text-[11px] font-mono text-slate-400 px-3 flex items-center justify-between select-none z-30 shrink-0">
       {/* Left Indicators */}
       <div className="flex items-center gap-4">
         {/* License Pill */}
-        <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+        <div className={`flex items-center gap-1.5 font-medium ${isValid ? 'text-emerald-400' : 'text-amber-500'}`}>
           <Key className="h-3 w-3" />
-          <span>License: Valid (162 Days)</span>
+          <span>{licenseText}</span>
         </div>
 
         {/* Separator */}

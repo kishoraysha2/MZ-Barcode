@@ -15,7 +15,7 @@ export interface SystemStatusState {
 export const useSystemStatusStore = create<SystemStatusState>((set) => ({
   isDatabaseReady: true,
   isIpcConnected: true,
-  isLicenseActive: true,
+  isLicenseActive: false,
   isPrinterSpoolReady: true,
   lastSyncTimestamp: new Date().toISOString(),
   setDatabaseReady: (isDatabaseReady) => set({ isDatabaseReady }),

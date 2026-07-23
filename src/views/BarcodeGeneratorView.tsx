@@ -1,42 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Barcode,
   QrCode,
   Printer,
   Sparkles,
-  Layers,
   Copy,
   Check,
-  Download,
-  Eye,
-  Sliders,
   CheckCircle2,
-  RefreshCw,
-  Plus
 } from 'lucide-react';
-import { Card, Button, Badge, Modal } from '../components/common/UIComponents';
+import { Card, Button, Modal } from '../components/common/UIComponents';
 import { BarcodeType, BarcodeRecord } from '../types';
 
 interface BarcodeGeneratorViewProps {
   onAddBarcode: (record: BarcodeRecord) => void;
   onNavigate: (view: string) => void;
+  initialSeqStart?: number;
 }
 
 export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
   onAddBarcode,
   onNavigate,
+  initialSeqStart = 1,
 }) => {
   const [genMode, setGenMode] = useState<'single' | 'batch'>('single');
   const [barcodeType, setBarcodeType] = useState<BarcodeType>('CODE128');
   const [prefix, setPrefix] = useState('MZ-');
   const [digits, setDigits] = useState(8);
-  const [seqStart, setSeqStart] = useState(108);
+  const [seqStart, setSeqStart] = useState(initialSeqStart);
   const [title, setTitle] = useState('High-Pressure Hydraulic Valve');
   const [category, setCategory] = useState('Machinery Parts');
   const [batchCount, setBatchCount] = useState(10);
   const [copied, setCopied] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [generatedSuccessMsg, setGeneratedSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSeqStart) {
+      setSeqStart(initialSeqStart);
+    }
+  }, [initialSeqStart]);
 
   const formattedBarcode = `${prefix}${String(seqStart).padStart(digits, '0')}`;
 
@@ -63,7 +65,7 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
       };
       onAddBarcode(newRec);
       setSeqStart((prev) => prev + 1);
-      setGeneratedSuccessMsg(`Successfully generated & saved ${formattedBarcode} to SQLite WAL database!`);
+      setGeneratedSuccessMsg(`Successfully generated & saved ${formattedBarcode} to SQLite database!`);
     } else {
       for (let i = 0; i < Math.min(batchCount, 50); i++) {
         const num = seqStart + i;
@@ -350,9 +352,8 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
       <Modal isOpen={showPrintModal} onClose={() => setShowPrintModal(false)} title="Silent Thermal Print Spooler">
         <div className="space-y-4">
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 space-y-1">
-            <div className="text-amber-400 font-bold">PRINTER: Zebra ZD421 (USB001)</div>
-            <div>STATUS: Ready (203 DPI)</div>
-            <div>SPOOL MODE: Direct Silent Vector Spool</div>
+            <div className="text-amber-400 font-bold font-mono">TARGET PRINTER: Default Thermal Driver</div>
+            <div>STATUS: Direct Silent Vector Spool</div>
             <div>LABEL TARGET: {formattedBarcode}</div>
           </div>
 
@@ -363,7 +364,7 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
             <Button
               onClick={() => {
                 setShowPrintModal(false);
-                setGeneratedSuccessMsg(`Dispatched barcode print job to Zebra ZD421 thermal printer spooler!`);
+                setGeneratedSuccessMsg(`Dispatched barcode print job to thermal printer spooler!`);
               }}
               icon={Printer}
             >

@@ -43,11 +43,11 @@ export interface AuditLogItem {
   id: number;
   timestamp: string;
   user: string;
-  role: UserRole;
+  role?: UserRole | string;
   action: string;
-  category: 'AUTHENTICATION' | 'BARCODE' | 'LICENSE' | 'SYSTEM' | 'BACKUP';
+  category?: 'AUTHENTICATION' | 'BARCODE' | 'LICENSE' | 'SYSTEM' | 'BACKUP' | string;
   details: string;
-  ipAddress: string;
+  ipAddress?: string;
 }
 
 export interface LicenseStatus {
@@ -60,7 +60,7 @@ export interface LicenseStatus {
   daysRemaining: number;
   durationDays: number;
   maxUsers: number;
-  status: 'valid' | 'expiring_soon' | 'expired' | 'tampered';
+  status: 'valid' | 'expiring_soon' | 'expired' | 'tampered' | 'Not Configured' | string;
   lastClockCheck: string;
 }
 
@@ -68,7 +68,7 @@ export interface SystemPrinter {
   id: string;
   name: string;
   isDefault: boolean;
-  status: 'ready' | 'offline' | 'paper_out' | 'busy';
+  status: 'ready' | 'offline' | 'paper_out' | 'busy' | 'error' | 'printing' | string;
   paperType: string;
   dpi: number;
   port: string;

@@ -6,6 +6,11 @@ export enum IPC_CHANNELS {
   DATABASE_INIT = 'ipc:database:init',
   DATABASE_STATUS = 'ipc:database:status',
 
+  // Dashboard IPC
+  DASHBOARD_GET_OVERVIEW = 'ipc:dashboard:get_overview',
+  DASHBOARD_GET_STATISTICS = 'ipc:dashboard:get_statistics',
+  DASHBOARD_GET_RECENT_BARCODES = 'ipc:dashboard:get_recent_barcodes',
+
   // Settings Foundation
   SETTINGS_GET = 'ipc:settings:get',
   SETTINGS_SAVE = 'ipc:settings:save',
@@ -19,18 +24,27 @@ export enum IPC_CHANNELS {
   // License Foundation
   LICENSE_CHECK = 'ipc:license:check',
   LICENSE_ACTIVATE = 'ipc:license:activate',
+  LICENSE_GET_STATUS = 'ipc:license:get_status',
 
   // Printer Foundation
   PRINTER_LIST = 'ipc:printer:list',
   PRINTER_STATUS = 'ipc:printer:status',
+  PRINTER_GET_DEFAULT = 'ipc:printer:get_default',
 
   // Barcode Foundation
   BARCODE_FORMATS = 'ipc:barcode:formats',
   BARCODE_VALIDATE = 'ipc:barcode:validate',
+  BARCODE_GET_ALL = 'ipc:barcode:get_all',
+  BARCODE_CREATE = 'ipc:barcode:create',
+  BARCODE_GET_NEXT_SEQUENCE = 'ipc:barcode:get_next_sequence',
 
   // System & Logs
   SYSTEM_INFO = 'ipc:system:info',
   LOGS_WRITE = 'ipc:logs:write',
+  AUDIT_LOGS_GET = 'ipc:audit_logs:get',
+
+  // Label Template IPC
+  TEMPLATE_LIST = 'ipc:template:list',
 
   // Auth & RBAC Foundation
   AUTH_LOGIN = 'ipc:auth:login',

@@ -1,6 +1,9 @@
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { ElectronAPI, IPCResponse } from '../shared/types';
 
+// In-memory array for web simulation fallback when in browser preview
+const webBarcodes: any[] = [];
+
 /**
  * Enterprise Secure Bridge API Implementation
  * Exposes type-safe window.electronAPI with zero Node.js raw handles
@@ -9,23 +12,40 @@ export const electronBridge: ElectronAPI = {
   databaseInit: async () => invokeIPC(IPC_CHANNELS.DATABASE_INIT),
   getDatabaseStatus: async () => invokeIPC(IPC_CHANNELS.DATABASE_STATUS),
 
+  // Dashboard IPC
+  getDashboardOverview: async () => invokeIPC(IPC_CHANNELS.DASHBOARD_GET_OVERVIEW),
+  getDashboardStatistics: async () => invokeIPC(IPC_CHANNELS.DASHBOARD_GET_STATISTICS),
+  getRecentBarcodes: async (limit) => invokeIPC(IPC_CHANNELS.DASHBOARD_GET_RECENT_BARCODES, limit),
+
+  // Settings IPC
   getSettings: async () => invokeIPC(IPC_CHANNELS.SETTINGS_GET),
   saveSettings: async (settings) => invokeIPC(IPC_CHANNELS.SETTINGS_SAVE, settings),
   resetSettings: async () => invokeIPC(IPC_CHANNELS.SETTINGS_RESET),
+  getAuditLogs: async () => invokeIPC(IPC_CHANNELS.AUDIT_LOGS_GET),
 
+  // Backup IPC
   createBackup: async () => invokeIPC(IPC_CHANNELS.BACKUP_CREATE),
   listBackups: async () => invokeIPC(IPC_CHANNELS.BACKUP_LIST),
   restoreBackup: async (file) => invokeIPC(IPC_CHANNELS.BACKUP_RESTORE, file),
 
+  // License IPC
+  getLicenseStatus: async () => invokeIPC(IPC_CHANNELS.LICENSE_GET_STATUS),
   checkLicense: async () => invokeIPC(IPC_CHANNELS.LICENSE_CHECK),
   activateLicense: async (key) => invokeIPC(IPC_CHANNELS.LICENSE_ACTIVATE, key),
 
+  // Printer IPC
+  getDefaultPrinter: async () => invokeIPC(IPC_CHANNELS.PRINTER_GET_DEFAULT),
   getPrinters: async () => invokeIPC(IPC_CHANNELS.PRINTER_LIST),
   getPrinterStatus: async (name) => invokeIPC(IPC_CHANNELS.PRINTER_STATUS, name),
 
+  // Barcode IPC
   getBarcodeFormats: async () => invokeIPC(IPC_CHANNELS.BARCODE_FORMATS),
   validateBarcode: async (value, format) => invokeIPC(IPC_CHANNELS.BARCODE_VALIDATE, { value, format }),
+  getAllBarcodes: async () => invokeIPC(IPC_CHANNELS.BARCODE_GET_ALL),
+  createBarcode: async (barcode) => invokeIPC(IPC_CHANNELS.BARCODE_CREATE, barcode),
+  getNextSequence: async (prefix) => invokeIPC(IPC_CHANNELS.BARCODE_GET_NEXT_SEQUENCE, prefix),
 
+  // System & Logs
   getSystemInfo: async () => invokeIPC(IPC_CHANNELS.SYSTEM_INFO),
   logMessage: async (level, message) => {
     await invokeIPC(IPC_CHANNELS.LOGS_WRITE, { level, message });
@@ -73,13 +93,83 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
         data: { initialized: true, wal: true } as T,
         timestamp,
       };
+    case IPC_CHANNELS.DASHBOARD_GET_OVERVIEW:
+      return {
+        success: true,
+        data: {
+          totalBarcodes: webBarcodes.length,
+          totalPrints: webBarcodes.reduce((acc, b) => acc + (b.print_count || 1), 0),
+          nextSequence: `MZ-${String(webBarcodes.length + 1).padStart(8, '0')}`,
+          activePrinter: 'Not Configured',
+          licenseStatus: 'Not Configured',
+          licenseDaysRemaining: 0,
+          hwid: 'Not Configured',
+          databaseHealth: 'SQLite WAL Mode Engine Online',
+          databaseSizeKb: 34,
+        } as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.DASHBOARD_GET_STATISTICS:
+      return {
+        success: true,
+        data: {
+          totalBarcodes: webBarcodes.length,
+          totalPrints: webBarcodes.reduce((acc, b) => acc + (b.print_count || 1), 0),
+          activeUsersCount: 2,
+          totalTemplatesCount: 0,
+          databaseSizeKb: 34,
+        } as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.DASHBOARD_GET_RECENT_BARCODES:
+    case IPC_CHANNELS.BARCODE_GET_ALL:
+      return {
+        success: true,
+        data: [...webBarcodes] as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.BARCODE_CREATE: {
+      const p = payload as any;
+      const created = {
+        id: Date.now(),
+        barcode_value: p.barcode_value,
+        prefix: p.prefix || 'MZ-',
+        sequence_number: p.sequence_number || webBarcodes.length + 1,
+        barcode_type: p.barcode_type || 'CODE128',
+        title: p.title || 'General Item',
+        category: p.category || 'General',
+        status: 'active',
+        print_count: p.print_count || 1,
+        created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        created_by: p.created_by || 'Customer Admin',
+      };
+      webBarcodes.unshift(created);
+      return {
+        success: true,
+        data: created as T,
+        timestamp,
+      };
+    }
+    case IPC_CHANNELS.BARCODE_GET_NEXT_SEQUENCE: {
+      const pref = (payload as string) || 'MZ-';
+      const seq = webBarcodes.length + 1;
+      return {
+        success: true,
+        data: {
+          prefix: pref,
+          nextSequence: seq,
+          nextBarcodeNumber: `${pref}${String(seq).padStart(8, '0')}`,
+        } as T,
+        timestamp,
+      };
+    }
     case IPC_CHANNELS.SETTINGS_GET:
       return {
         success: true,
         data: {
           app: { theme: 'dark', autoUpdate: false, language: 'en-US', edition: 'customer' },
           database: { path: '%APPDATA%/MZBarcodeSuite/data/mz_barcode_suite.db', walMode: true, autoBackupDaily: true },
-          printing: { defaultPrinter: 'Zebra ZD421 (203 dpi)', paperWidthMm: 100, paperHeightMm: 50, dpi: 203 },
+          printing: { defaultPrinter: 'Not Configured', paperWidthMm: 50, paperHeightMm: 25, dpi: 203 },
           security: { sessionTimeoutMinutes: 30, auditLogging: true },
         } as unknown as T,
         timestamp,
@@ -88,6 +178,12 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
       return {
         success: true,
         data: payload as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.AUDIT_LOGS_GET:
+      return {
+        success: true,
+        data: [] as T,
         timestamp,
       };
     case IPC_CHANNELS.BACKUP_CREATE:
@@ -99,19 +195,43 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
     case IPC_CHANNELS.BACKUP_LIST:
       return {
         success: true,
-        data: ['mz_backup_2026-07-22.db.bak', 'mz_backup_2026-07-23.db.bak'] as T,
+        data: [] as T,
         timestamp,
       };
-    case IPC_CHANNELS.LICENSE_CHECK:
+    case IPC_CHANNELS.PRINTER_GET_DEFAULT:
       return {
         success: true,
-        data: { active: true, type: 'ENTERPRISE_FOUNDATION_UNLOCKED' } as T,
+        data: null as T,
         timestamp,
       };
     case IPC_CHANNELS.PRINTER_LIST:
       return {
         success: true,
-        data: ['Zebra ZD421 (203 dpi)', 'TSC TTP-244 Pro', 'SATO CL4NX Plus'] as T,
+        data: [] as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.LICENSE_GET_STATUS:
+      return {
+        success: true,
+        data: {
+          isActivated: false,
+          customerName: 'Not Configured',
+          hwid: 'Not Configured',
+          activationKey: '',
+          issuedAt: '',
+          expiresAt: '',
+          daysRemaining: 0,
+          durationDays: 0,
+          maxUsers: 0,
+          status: 'Not Configured',
+          lastClockCheck: 'Not Configured',
+        } as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.LICENSE_CHECK:
+      return {
+        success: true,
+        data: { active: false, type: 'NOT_CONFIGURED' } as T,
         timestamp,
       };
     case IPC_CHANNELS.BARCODE_FORMATS:
@@ -165,8 +285,6 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
         data: [
           { id: 1, username: 'owner', fullName: 'System Owner', roleId: 1, role: 'OWNER', isActive: true, createdAt: '2026-07-23 00:00:00', lastLogin: '2026-07-23 02:15:00' },
           { id: 2, username: 'admin', fullName: 'Enterprise Admin', roleId: 2, role: 'ADMIN', isActive: true, createdAt: '2026-07-23 00:00:00', lastLogin: '2026-07-23 02:30:00' },
-          { id: 3, username: 'operator1', fullName: 'Mark Operator', roleId: 3, role: 'USER', isActive: true, createdAt: '2026-07-23 01:00:00', lastLogin: '2026-07-22 18:20:00' },
-          { id: 4, username: 'inspector', fullName: 'Sarah Viewer', roleId: 4, role: 'VIEWER', isActive: false, createdAt: '2026-07-23 01:30:00', lastLogin: 'Never' },
         ] as T,
         timestamp,
       };

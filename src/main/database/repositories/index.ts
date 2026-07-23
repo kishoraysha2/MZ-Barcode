@@ -6,3 +6,5 @@ export * from './SettingsRepository';
 export * from './LicenseRepository';
 export * from './AuditRepository';
 export * from './BackupRepository';
+export * from './DashboardRepository';
+export * from './PrinterRepository';

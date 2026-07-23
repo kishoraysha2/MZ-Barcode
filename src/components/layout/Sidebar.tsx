@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Barcode,
@@ -21,6 +21,7 @@ import {
   Unlock
 } from 'lucide-react';
 import { AppEdition, UserRole } from '../../types';
+import { electronBridge } from '../../preload/bridge';
 
 interface SidebarProps {
   edition: AppEdition;
@@ -39,6 +40,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggleCollapse,
 }) => {
+  const [licenseInfo, setLicenseInfo] = useState({
+    isActivated: false,
+    daysRemaining: 0,
+    hwid: 'Not Configured',
+  });
+
+  useEffect(() => {
+    async function loadLicense() {
+      try {
+        const res = await electronBridge.getLicenseStatus();
+        if (res.success && res.data) {
+          setLicenseInfo({
+            isActivated: Boolean(res.data.isActivated),
+            daysRemaining: res.data.daysRemaining || 0,
+            hwid: res.data.hwid || 'Not Configured',
+          });
+        }
+      } catch (err) {
+        // Default unconfigured
+      }
+    }
+    loadLicense();
+  }, []);
   // Customer Suite Nav
   const customerNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['OWNER', 'ADMIN', 'USER'] },
@@ -128,16 +152,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {!collapsed && edition === 'customer' && (
           <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
             <div className="flex items-center justify-between text-[10px] font-medium text-slate-400 mb-1">
-              <span className="flex items-center gap-1 text-emerald-400 font-bold">
-                <ShieldCheck className="h-3 w-3" /> HWID Locked
+              <span className={`flex items-center gap-1 font-bold ${licenseInfo.isActivated ? 'text-emerald-400' : 'text-amber-500'}`}>
+                <ShieldCheck className="h-3 w-3" /> {licenseInfo.isActivated ? 'HWID Locked' : 'License Inactive'}
               </span>
-              <span>162 Days</span>
+              <span>{licenseInfo.isActivated ? `${licenseInfo.daysRemaining} Days` : 'Not Configured'}</span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
-              <div className="bg-amber-500 h-full w-[55%]" />
+              <div className={`h-full ${licenseInfo.isActivated ? 'bg-amber-500 w-[55%]' : 'bg-rose-500/50 w-[0%]'}`} />
             </div>
             <p className="text-[10px] text-slate-500 mt-1.5 truncate">
-              HWID: MZ-HWID-9A8B-7C6D-5E4F
+              HWID: {licenseInfo.hwid}
             </p>
           </div>
         )}

@@ -65,21 +65,5 @@ export function runDevelopmentSeeds(): void {
     }
   }
 
-  // 4. Default License Info Seed
-  const existingLicense = QueryBuilder.selectOne('license_info', { license_key: 'MZ-ENT-2026-FOUNDATION-UNLOCK-KEY' });
-  if (!existingLicense) {
-    QueryBuilder.insert('license_info', {
-      license_key: 'MZ-ENT-2026-FOUNDATION-UNLOCK-KEY',
-      customer_name: 'Enterprise License Holder',
-      hwid: 'HWID-9921-A87X-MZ',
-      status: 'valid',
-      issued_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      max_users: 10,
-      features_json: JSON.stringify({ modules: ['generator', 'designer', 'backup', 'users'] }),
-    });
-    logger.info('[Seed] Seeded License Info.');
-  }
-
   logger.info('[Seed Runner] Development Seed Complete.');
 }

@@ -229,17 +229,17 @@ export const INITIAL_AUDIT_LOGS: AuditLogItem[] = [
 ];
 
 export const MOCK_LICENSE: LicenseStatus = {
-  isActivated: true,
-  customerName: 'Apex Industrial Logistics Inc.',
-  hwid: 'MZ-HWID-9A8B-7C6D-5E4F',
-  activationKey: 'MZ-ACT-8F3E-91A2-4B0C-72D9-EE12-00A9',
-  issuedAt: '2026-01-01',
-  expiresAt: '2027-01-01',
-  daysRemaining: 162,
-  durationDays: 365,
-  maxUsers: 10,
-  status: 'valid',
-  lastClockCheck: '2026-07-23 09:25:00',
+  isActivated: false,
+  customerName: 'Not Configured',
+  hwid: 'Not Configured',
+  activationKey: '',
+  issuedAt: 'Not Configured',
+  expiresAt: 'Not Configured',
+  daysRemaining: 0,
+  durationDays: 0,
+  maxUsers: 0,
+  status: 'Not Configured',
+  lastClockCheck: 'Not Configured',
 };
 
 export const MOCK_PRINTERS: SystemPrinter[] = [

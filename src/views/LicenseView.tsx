@@ -79,20 +79,24 @@ export const LicenseView: React.FC<LicenseViewProps> = ({ license }) => {
         <div className="lg:col-span-7 space-y-6">
           <Card title="License Certificate" subtitle="Validated via RSA Public Key offline verification">
             <div className="space-y-4 text-xs">
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+              <div className={`p-4 rounded-xl flex items-center justify-between border ${
+                license.isActivated
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : 'bg-amber-500/10 border-amber-500/30'
+              }`}>
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-8 w-8 text-emerald-500" />
+                  <ShieldCheck className={`h-8 w-8 ${license.isActivated ? 'text-emerald-500' : 'text-amber-500'}`} />
                   <div>
-                    <h4 className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      License Status: ACTIVE & VALID
+                    <h4 className={`text-sm font-bold ${license.isActivated ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      License Status: {license.isActivated ? 'ACTIVE & VALID' : 'NOT CONFIGURED'}
                     </h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       Registered to: <strong className="text-slate-800 dark:text-slate-200">{license.customerName}</strong>
                     </p>
                   </div>
                 </div>
-                <Badge variant="emerald" size="md">
-                  RSA VALID
+                <Badge variant={license.isActivated ? 'emerald' : 'amber'} size="md">
+                  {license.isActivated ? 'RSA VALID' : 'NOT CONFIGURED'}
                 </Badge>
               </div>
 
@@ -100,10 +104,12 @@ export const LicenseView: React.FC<LicenseViewProps> = ({ license }) => {
               <div className="space-y-1.5 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
                   <span>Expiration Countdown</span>
-                  <span className="font-mono text-amber-500">{license.daysRemaining} Days Remaining</span>
+                  <span className="font-mono text-amber-500">
+                    {license.isActivated ? `${license.daysRemaining} Days Remaining` : '0 Days Remaining'}
+                  </span>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                  <div className="bg-amber-500 h-full w-[55%]" />
+                  <div className={`h-full ${license.isActivated ? 'bg-amber-500 w-[55%]' : 'bg-slate-600 w-0'}`} />
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                   <span>Issued: {license.issuedAt}</span>

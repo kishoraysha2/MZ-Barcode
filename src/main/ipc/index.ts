@@ -1,4 +1,5 @@
 import { registerDatabaseIPC } from './databaseIPC';
+import { registerDashboardIPC } from './dashboardIPC';
 import { registerSettingsIPC } from './settingsIPC';
 import { registerBackupIPC } from './backupIPC';
 import { registerLicenseIPC } from './licenseIPC';
@@ -12,6 +13,7 @@ export function registerAllIPCHandlers(
 ) {
   logger.info('Registering all Foundation IPC Channels...');
   registerDatabaseIPC(registerHandler);
+  registerDashboardIPC(registerHandler);
   registerSettingsIPC(registerHandler);
   registerBackupIPC(registerHandler);
   registerLicenseIPC(registerHandler);

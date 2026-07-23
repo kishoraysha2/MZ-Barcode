@@ -2,15 +2,11 @@ import React, { useState } from 'react';
 import {
   History,
   Search,
-  Filter,
-  Download,
-  Printer,
-  Eye,
-  ArrowUpDown,
   FileSpreadsheet,
-  Trash2,
+  Printer,
+  Tag,
   CheckCircle2,
-  Tag
+  Inbox
 } from 'lucide-react';
 import { Card, Button, Badge, Modal } from '../components/common/UIComponents';
 import { BarcodeRecord } from '../types';
@@ -158,8 +154,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ barcodes }) => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
               {filteredBarcodes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">
-                    No barcodes found matching search criteria.
+                  <td colSpan={8} className="p-8 text-center text-slate-400 font-mono">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Inbox className="h-8 w-8 text-slate-500 stroke-1" />
+                      <span className="font-bold text-slate-300">No Records</span>
+                    </div>
                   </td>
                 </tr>
               ) : (

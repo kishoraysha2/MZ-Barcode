@@ -4,21 +4,20 @@ import {
   Building,
   Barcode,
   Printer,
-  Shield,
   FileText,
   Save,
   CheckCircle2,
-  Sliders,
-  HardDrive
+  Inbox
 } from 'lucide-react';
-import { Card, Button, Badge } from '../components/common/UIComponents';
+import { Card, Button } from '../components/common/UIComponents';
 import { AuditLogItem } from '../types';
 
 interface SettingsViewProps {
   auditLogs: AuditLogItem[];
+  defaultPrinterName?: string;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ auditLogs }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ auditLogs, defaultPrinterName = 'Not Configured' }) => {
   const [activeTab, setActiveTab] = useState<'company' | 'barcode' | 'printer' | 'logs'>('company');
   const [companyName, setCompanyName] = useState('Apex Industrial Logistics Inc.');
   const [companyAddress, setCompanyAddress] = useState('100 Industrial Parkway, Suite 400');
@@ -27,7 +26,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ auditLogs }) => {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const handleSave = () => {
-    setSavedMsg('System configuration updated and committed to SQLite WAL settings table!');
+    setSavedMsg('System configuration updated and committed to SQLite settings table!');
     setTimeout(() => setSavedMsg(null), 3000);
   };
 
@@ -141,40 +140,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ auditLogs }) => {
       {activeTab === 'printer' && (
         <Card title="Thermal Printer Driver Settings" subtitle="Configure spooling speed and DPI settings">
           <div className="p-4 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 space-y-2">
-            <div className="text-amber-400 font-bold">PRIMARY THERMAL DRIVER: Zebra ZD421</div>
-            <div>• Resolution: 203 DPI (8 dots/mm)</div>
-            <div>• Connection: USB Direct Spool (Win32 API)</div>
-            <div>• Print Speed: 152 mm/sec</div>
+            <div className="text-amber-400 font-bold">PRIMARY THERMAL DRIVER: {defaultPrinterName}</div>
+            <div>• Connection: Direct Thermal Spooler (Win32 Spool API)</div>
+            <div>• Driver Status: {defaultPrinterName === 'Not Configured' ? 'Not Configured' : 'Ready'}</div>
           </div>
         </Card>
       )}
 
       {activeTab === 'logs' && (
         <Card title="Security & Audit Logs" subtitle="Tamper-proof event logs recorded in SQLite">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-mono bg-slate-50 dark:bg-slate-950/50">
-                  <th className="p-2.5">ID</th>
-                  <th className="p-2.5">Timestamp</th>
-                  <th className="p-2.5">User</th>
-                  <th className="p-2.5">Action</th>
-                  <th className="p-2.5">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
-                {auditLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="p-2.5 text-slate-500">#{log.id}</td>
-                    <td className="p-2.5 text-amber-500">{log.timestamp}</td>
-                    <td className="p-2.5 font-bold">{log.user}</td>
-                    <td className="p-2.5">{log.action}</td>
-                    <td className="p-2.5 text-slate-400">{log.details}</td>
+          {auditLogs.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center space-y-2">
+              <Inbox className="h-8 w-8 text-slate-500 stroke-1" />
+              <p className="text-xs font-bold text-slate-300">No Records</p>
+              <p className="text-[11px] text-slate-500">No audit logs stored in database yet.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-mono bg-slate-50 dark:bg-slate-950/50">
+                    <th className="p-2.5">ID</th>
+                    <th className="p-2.5">Timestamp</th>
+                    <th className="p-2.5">User</th>
+                    <th className="p-2.5">Action</th>
+                    <th className="p-2.5">Details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+                  {auditLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="p-2.5 text-slate-500">#{log.id}</td>
+                      <td className="p-2.5 text-amber-500">{log.timestamp}</td>
+                      <td className="p-2.5 font-bold">{log.user}</td>
+                      <td className="p-2.5">{log.action}</td>
+                      <td className="p-2.5 text-slate-400">{log.details}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
     </div>
