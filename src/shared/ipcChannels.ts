@@ -46,6 +46,14 @@ export enum IPC_CHANNELS {
   // Label Template IPC
   TEMPLATE_LIST = 'ipc:template:list',
 
+  // Sprint 5 Barcode & Print Foundation
+  BARCODE_GENERATE = 'barcode:generate',
+  BARCODE_PREVIEW = 'barcode:preview',
+  BARCODE_EXPORT = 'barcode:export',
+  PRINT_PREVIEW = 'print:preview',
+  PRINT_CREATE_JOB = 'print:createJob',
+  PRINTER_GET_PROFILES = 'printer:getProfiles',
+
   // Auth & RBAC Foundation
   AUTH_LOGIN = 'ipc:auth:login',
   AUTH_LOGOUT = 'ipc:auth:logout',

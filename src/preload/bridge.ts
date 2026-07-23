@@ -1,8 +1,12 @@
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { ElectronAPI, IPCResponse } from '../shared/types';
+import { BarcodeEngine, BarcodeGenerateOptions } from '../main/services/BarcodeEngine';
+import { PrintService, PrintPreviewOptions, PrintJobOptions } from '../main/services/PrintService';
 
 // In-memory array for web simulation fallback when in browser preview
 const webBarcodes: any[] = [];
+let barcodeAutoId = Date.now();
+
 
 /**
  * Enterprise Secure Bridge API Implementation
@@ -37,13 +41,20 @@ export const electronBridge: ElectronAPI = {
   getDefaultPrinter: async () => invokeIPC(IPC_CHANNELS.PRINTER_GET_DEFAULT),
   getPrinters: async () => invokeIPC(IPC_CHANNELS.PRINTER_LIST),
   getPrinterStatus: async (name) => invokeIPC(IPC_CHANNELS.PRINTER_STATUS, name),
+  getPrinterProfiles: async () => invokeIPC(IPC_CHANNELS.PRINTER_GET_PROFILES),
 
-  // Barcode IPC
+  // Barcode & Print Foundation IPC (Sprint 5)
   getBarcodeFormats: async () => invokeIPC(IPC_CHANNELS.BARCODE_FORMATS),
   validateBarcode: async (value, format) => invokeIPC(IPC_CHANNELS.BARCODE_VALIDATE, { value, format }),
   getAllBarcodes: async () => invokeIPC(IPC_CHANNELS.BARCODE_GET_ALL),
+  generateBarcode: async (options) => invokeIPC(IPC_CHANNELS.BARCODE_GENERATE, options),
+  previewBarcode: async (options) => invokeIPC(IPC_CHANNELS.BARCODE_PREVIEW, options),
+  exportBarcode: async (options) => invokeIPC(IPC_CHANNELS.BARCODE_EXPORT, options),
+  previewPrint: async (options) => invokeIPC(IPC_CHANNELS.PRINT_PREVIEW, options),
+  createPrintJob: async (options) => invokeIPC(IPC_CHANNELS.PRINT_CREATE_JOB, options),
   createBarcode: async (barcode) => invokeIPC(IPC_CHANNELS.BARCODE_CREATE, barcode),
   getNextSequence: async (prefix) => invokeIPC(IPC_CHANNELS.BARCODE_GET_NEXT_SEQUENCE, prefix),
+
 
   // System & Logs
   getSystemInfo: async () => invokeIPC(IPC_CHANNELS.SYSTEM_INFO),
@@ -77,7 +88,7 @@ async function invokeIPC<T>(channel: string, payload?: unknown): Promise<IPCResp
   return simulateWebIPCResponse<T>(channel, payload);
 }
 
-function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCResponse<T> {
+async function simulateWebIPCResponse<T>(channel: string, payload?: unknown): Promise<IPCResponse<T>> {
   const timestamp = new Date().toISOString();
 
   switch (channel) {
@@ -93,6 +104,55 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
         data: { initialized: true, wal: true } as T,
         timestamp,
       };
+    case IPC_CHANNELS.PRINTER_GET_PROFILES:
+      return {
+        success: true,
+        data: [
+          { id: 1, name: 'Zebra ZD421 Direct Thermal (203 DPI)', driver_type: 'ZEBRA_ZPL', is_default: 1, dpi: 203, paper_type: 'Continuous 50mm x 25mm', port: 'USB001' },
+          { id: 2, name: 'TSPL Industrial Thermal Printer (300 DPI)', driver_type: 'TSPL', is_default: 0, dpi: 300, paper_type: 'Gap 100mm x 150mm', port: 'USB002' },
+          { id: 3, name: 'Generic Windows Spool Printer Driver', driver_type: 'WINDOWS', is_default: 0, dpi: 203, paper_type: 'Standard Thermal Paper', port: 'LPT1' },
+        ] as T,
+        timestamp,
+      };
+    case IPC_CHANNELS.BARCODE_GENERATE:
+    case IPC_CHANNELS.BARCODE_PREVIEW: {
+      const opts = payload as BarcodeGenerateOptions;
+      const genRes = await BarcodeEngine.generate(opts);
+      if (!genRes.success) {
+        return { success: false, error: { code: 'GENERATE_FAILED', message: genRes.error || 'Barcode generation failed' }, timestamp };
+      }
+      return { success: true, data: genRes as T, timestamp };
+    }
+    case IPC_CHANNELS.BARCODE_EXPORT: {
+      const opts = payload as BarcodeGenerateOptions & { format?: 'svg' | 'png' };
+      const expRes = await BarcodeEngine.export(opts);
+      if (!expRes.success) {
+        return { success: false, error: { code: 'EXPORT_FAILED', message: expRes.error || 'Barcode export failed' }, timestamp };
+      }
+      return { success: true, data: expRes as T, timestamp };
+    }
+    case IPC_CHANNELS.PRINT_PREVIEW: {
+      const opts = payload as PrintPreviewOptions;
+      const printRes = await PrintService.generatePreview(opts);
+      if (!printRes.success) {
+        return { success: false, error: { code: 'PREVIEW_FAILED', message: printRes.error || 'Print preview failed' }, timestamp };
+      }
+      return { success: true, data: printRes as T, timestamp };
+    }
+    case IPC_CHANNELS.PRINT_CREATE_JOB: {
+      const p = payload as PrintJobOptions;
+      return {
+        success: true,
+        data: {
+          jobId: Math.floor(Math.random() * 9000) + 1000,
+          status: 'PENDING',
+          printerName: p.printerName,
+          copies: p.copies || 1,
+        } as T,
+        timestamp,
+      };
+    }
+
     case IPC_CHANNELS.DASHBOARD_GET_OVERVIEW:
       return {
         success: true,
@@ -130,8 +190,9 @@ function simulateWebIPCResponse<T>(channel: string, payload?: unknown): IPCRespo
       };
     case IPC_CHANNELS.BARCODE_CREATE: {
       const p = payload as any;
+      barcodeAutoId += 1;
       const created = {
-        id: Date.now(),
+        id: p.id || barcodeAutoId,
         barcode_value: p.barcode_value,
         prefix: p.prefix || 'MZ-',
         sequence_number: p.sequence_number || webBarcodes.length + 1,

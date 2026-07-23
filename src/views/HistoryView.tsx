@@ -162,8 +162,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ barcodes }) => {
                   </td>
                 </tr>
               ) : (
-                filteredBarcodes.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                filteredBarcodes.map((b, idx) => (
+                  <tr key={b.id ? `bc-${b.id}-${idx}` : `bc-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                     <td className="p-3 font-mono font-bold text-amber-600 dark:text-amber-400">{b.barcodeNumber}</td>
                     <td className="p-3 font-medium text-slate-800 dark:text-slate-100">{b.title}</td>
                     <td className="p-3">

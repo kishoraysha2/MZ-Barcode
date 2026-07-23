@@ -2,7 +2,21 @@ export type AppEdition = 'customer' | 'owner';
 
 export type UserRole = 'OWNER' | 'ADMIN' | 'USER' | 'OPERATOR' | 'VIEWER';
 
-export type BarcodeType = 'CODE128' | 'QR' | 'EAN13' | 'DATAMATRIX' | 'PDF417';
+export type BarcodeType =
+  | 'CODE128'
+  | 'QR'
+  | 'EAN13'
+  | 'DATAMATRIX'
+  | 'PDF417'
+  | 'Code128'
+  | 'Code39'
+  | 'EAN-13'
+  | 'EAN-8'
+  | 'UPC-A'
+  | 'UPC-E'
+  | 'QR Code'
+  | 'Data Matrix'
+  | string;
 
 export interface UserAccount {
   id: number;

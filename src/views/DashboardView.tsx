@@ -142,8 +142,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
-                    {barcodes.slice(0, 5).map((b) => (
-                      <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                    {barcodes.slice(0, 5).map((b, idx) => (
+                      <tr key={b.id ? `dash-bc-${b.id}-${idx}` : `dash-bc-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                         <td className="py-2.5 font-mono font-bold text-amber-600 dark:text-amber-400">{b.barcodeNumber}</td>
                         <td className="py-2.5 font-medium text-slate-800 dark:text-slate-200">{b.title}</td>
                         <td className="py-2.5">

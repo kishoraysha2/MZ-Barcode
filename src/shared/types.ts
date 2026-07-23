@@ -121,6 +121,79 @@ export interface LicenseStatusInfo {
   lastClockCheck: string;
 }
 
+export interface BarcodeGenerateOptions {
+  value: string;
+  type: string;
+  width?: number;
+  height?: number;
+  margin?: number;
+  font?: string;
+  fontSize?: number;
+  showText?: boolean;
+}
+
+export interface BarcodeGenerateResult {
+  success: boolean;
+  svg?: string;
+  pngDataUrl?: string;
+  type?: string;
+  value?: string;
+  error?: string;
+}
+
+export interface LabelConfig {
+  width: number;
+  height: number;
+  dpi: number;
+  orientation: 'PORTRAIT' | 'LANDSCAPE';
+  copies: number;
+  margins: { top: number; right: number; bottom: number; left: number };
+  rotation: 0 | 90 | 180 | 270;
+  paperType: string;
+}
+
+export interface PrintPreviewOptions {
+  printerName: string;
+  driverType: string;
+  labelConfig: LabelConfig;
+  barcodeValue: string;
+  barcodeType: string;
+  title?: string;
+}
+
+export interface PrintPreviewResult {
+  success: boolean;
+  zplCode?: string;
+  tsplCode?: string;
+  previewSvg?: string;
+  previewPngDataUrl?: string;
+  formattedJobCommand?: string;
+  error?: string;
+}
+
+export interface PrintJobOptions {
+  printerName: string;
+  driverType?: string;
+  templateId?: number;
+  barcodeId?: number;
+  barcodeValue: string;
+  barcodeType: string;
+  title?: string;
+  copies?: number;
+  labelConfig?: Partial<LabelConfig>;
+}
+
+export interface PrinterProfileItem {
+  id: number;
+  name: string;
+  driver_type: string;
+  is_default: number;
+  dpi: number;
+  paper_type: string;
+  port: string;
+  config_json?: string;
+}
+
 export interface PrinterInfoItem {
   id: string;
   name: string;
@@ -161,12 +234,19 @@ export interface ElectronAPI {
   getDefaultPrinter: () => Promise<IPCResponse<PrinterInfoItem | null>>;
   getPrinters: () => Promise<IPCResponse<PrinterInfoItem[]>>;
   getPrinterStatus: (name: string) => Promise<IPCResponse<{ online: boolean; status: string }>>;
+  getPrinterProfiles: () => Promise<IPCResponse<PrinterProfileItem[]>>;
 
-  // Barcode IPC
+  // Barcode Engine & Printing IPC (Sprint 5)
   getBarcodeFormats: () => Promise<IPCResponse<string[]>>;
-  validateBarcode: (value: string, format: string) => Promise<IPCResponse<{ valid: boolean }>>;
+  validateBarcode: (value: string, format: string) => Promise<IPCResponse<{ valid: boolean; error?: string }>>;
   getAllBarcodes: () => Promise<IPCResponse<BarcodeRecordItem[]>>;
+  generateBarcode: (options: BarcodeGenerateOptions) => Promise<IPCResponse<BarcodeGenerateResult>>;
+  previewBarcode: (options: BarcodeGenerateOptions) => Promise<IPCResponse<BarcodeGenerateResult>>;
+  exportBarcode: (options: BarcodeGenerateOptions & { format?: 'svg' | 'png' }) => Promise<IPCResponse<{ success: boolean; dataUrl?: string; svgContent?: string; error?: string }>>;
+  previewPrint: (options: PrintPreviewOptions) => Promise<IPCResponse<PrintPreviewResult>>;
+  createPrintJob: (options: PrintJobOptions) => Promise<IPCResponse<{ jobId: number; status: string; printerName: string; copies: number }>>;
   createBarcode: (barcode: {
+    id?: number;
     barcode_value: string;
     prefix?: string;
     sequence_number?: number;
@@ -177,6 +257,7 @@ export interface ElectronAPI {
     print_count?: number;
   }) => Promise<IPCResponse<BarcodeRecordItem>>;
   getNextSequence: (prefix?: string) => Promise<IPCResponse<{ prefix: string; nextSequence: number; nextBarcodeNumber: string }>>;
+
 
   // System & Logs
   getSystemInfo: () => Promise<IPCResponse<{ platform: string; version: string; dirs: SystemDirectories }>>;

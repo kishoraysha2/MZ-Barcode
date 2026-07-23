@@ -25,6 +25,7 @@ export const GeneratorPage: React.FC = () => {
   const handleAddBarcode = async (record: BarcodeRecord) => {
     try {
       await electronBridge.createBarcode({
+        id: record.id,
         barcode_value: record.barcodeNumber,
         prefix: record.prefix,
         sequence_number: record.sequenceNumber,
