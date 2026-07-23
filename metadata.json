@@ -1,0 +1,6 @@
+{
+  "name": "MZ Barcode Suite",
+  "description": "Enterprise Architecture Blueprint & Software Design Document for MZ Barcode Suite v1.0 Desktop Edition",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

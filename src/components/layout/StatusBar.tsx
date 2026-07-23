@@ -1,0 +1,65 @@
+import React from 'react';
+import {
+  ShieldCheck,
+  Printer,
+  Database,
+  Clock,
+  HardDrive,
+  Activity,
+  Key
+} from 'lucide-react';
+import { AppEdition } from '../../types';
+
+interface StatusBarProps {
+  edition: AppEdition;
+}
+
+export const StatusBar: React.FC<StatusBarProps> = ({ edition }) => {
+  return (
+    <footer className="h-7 bg-slate-950 border-t border-slate-800 text-[11px] font-mono text-slate-400 px-3 flex items-center justify-between select-none z-30 shrink-0">
+      {/* Left Indicators */}
+      <div className="flex items-center gap-4">
+        {/* License Pill */}
+        <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+          <Key className="h-3 w-3" />
+          <span>License: Valid (162 Days)</span>
+        </div>
+
+        {/* Separator */}
+        <span className="text-slate-800">|</span>
+
+        {/* Thermal Printer Pill */}
+        <div className="flex items-center gap-1.5 text-slate-300">
+          <Printer className="h-3 w-3 text-cyan-400" />
+          <span>Zebra ZD421 (203 DPI) [READY]</span>
+        </div>
+
+        {/* Separator */}
+        <span className="text-slate-800">|</span>
+
+        {/* SQLite Database Pill */}
+        <div className="flex items-center gap-1.5 text-slate-300">
+          <Database className="h-3 w-3 text-amber-400" />
+          <span>SQLite WAL (34 KB)</span>
+        </div>
+
+        {/* Separator */}
+        <span className="text-slate-800 hidden md:inline">|</span>
+
+        {/* Clock Guard Pill */}
+        <div className="hidden md:flex items-center gap-1.5 text-slate-400">
+          <Clock className="h-3 w-3 text-indigo-400" />
+          <span>Clock Monotonic Guard: OK</span>
+        </div>
+      </div>
+
+      {/* Right System Info */}
+      <div className="flex items-center gap-3">
+        <span className="text-slate-500">Offline Air-Gapped Mode</span>
+        <span className="px-1.5 py-0.2 bg-slate-900 border border-slate-800 rounded text-[10px] text-slate-300 font-sans">
+          {edition === 'customer' ? 'Customer App v1.0.0' : 'Owner Console v1.0.0'}
+        </span>
+      </div>
+    </footer>
+  );
+};

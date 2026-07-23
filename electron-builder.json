@@ -1,0 +1,46 @@
+{
+  "appId": "com.mz.barcodesuite.enterprise",
+  "productName": "MZ Barcode Suite Enterprise",
+  "executableName": "MZBarcodeSuite",
+  "copyright": "Copyright © 2026 MZ Enterprise Software. All Rights Reserved.",
+  "directories": {
+    "output": "dist_electron",
+    "buildResources": "assets"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.ico",
+    "publisherName": "MZ Enterprise Software",
+    "verifyUpdateCodeSignature": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "MZ Barcode Suite Enterprise",
+    "installerIcon": "assets/icon.ico",
+    "uninstallerIcon": "assets/icon.ico",
+    "installerHeaderIcon": "assets/icon.ico"
+  },
+  "portable": {
+    "artifactName": "MZBarcodeSuite_Enterprise_v1.0_Portable.exe"
+  },
+  "publish": {
+    "provider": "generic",
+    "url": "https://updates.mzbarcodesuite.com/release"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist-electron",
+    "rootDir": "src",
+    "noEmit": false,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@main/*": ["./src/main/*"],
+      "@preload/*": ["./src/preload/*"]
+    }
+  },
+  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*"]
+}
