@@ -2,6 +2,7 @@ import { barcodeRepository, BarcodeRow } from './BarcodeRepository';
 import { printerRepository } from './PrinterRepository';
 import { licenseRepository } from './LicenseRepository';
 import { userRepository } from './UserRepository';
+import { PrintService } from '../../services/PrintService';
 
 export interface DashboardOverviewData {
   totalBarcodes: number;
@@ -24,13 +25,14 @@ export interface DashboardStatisticsData {
 }
 
 export class DashboardRepository {
-  public getOverview(): DashboardOverviewData {
+  public async getOverview(): Promise<DashboardOverviewData> {
     const totalBarcodes = barcodeRepository.count();
     const totalPrints = barcodeRepository.getTotalPrintCount();
     const nextSeqNum = barcodeRepository.peekNextSequenceValue('MZ-');
     const nextSequence = `MZ-${String(nextSeqNum).padStart(8, '0')}`;
 
-    const defaultPrinter = printerRepository.getDefaultPrinter();
+    const printers = await PrintService.getPrinters();
+    const defaultPrinter = printers.find((p) => p.is_default === 1) || printerRepository.getDefaultPrinter();
     const activePrinter = defaultPrinter ? defaultPrinter.name : 'Not Configured';
 
     const license = licenseRepository.findActiveLicense();

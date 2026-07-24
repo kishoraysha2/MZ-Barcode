@@ -12,6 +12,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { Card, Button, Modal } from '../components/common/UIComponents';
+import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { BarcodeRecord } from '../types';
 import { electronBridge } from '../preload/bridge';
 
@@ -66,7 +67,7 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
   // Print Preview & Spooling State
   const [driverType, setDriverType] = useState<'WINDOWS' | 'ZEBRA_ZPL' | 'TSPL'>('ZEBRA_ZPL');
   const [printersList, setPrintersList] = useState<any[]>([]);
-  const [selectedPrinter, setSelectedPrinter] = useState<string>('Zebra ZD421 Direct Thermal (203 DPI)');
+  const [selectedPrinter, setSelectedPrinter] = useState<string>('');
   const [zplCode, setZplCode] = useState<string>('');
   const [tsplCode, setTsplCode] = useState<string>('');
   const [formattedCmd, setFormattedCmd] = useState<string>('');
@@ -179,14 +180,19 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
     if (showPrintModal) {
       async function loadPrintersAndPreview() {
         try {
-          const profilesRes = await electronBridge.getPrinterProfiles();
-          if (profilesRes.success && profilesRes.data && profilesRes.data.length > 0) {
-            setPrintersList(profilesRes.data);
-            setSelectedPrinter(profilesRes.data[0].name);
+          const prnRes = await electronBridge.getPrinters();
+          let effectivePrinter = selectedPrinter;
+          if (prnRes.success && Array.isArray(prnRes.data) && prnRes.data.length > 0) {
+            setPrintersList(prnRes.data);
+            const defPrn = prnRes.data.find((p: any) => p.is_default === 1 || p.isDefault) || prnRes.data[0];
+            if (defPrn?.name) {
+              effectivePrinter = defPrn.name;
+              setSelectedPrinter(defPrn.name);
+            }
           }
 
           const printRes = await electronBridge.previewPrint({
-            printerName: selectedPrinter,
+            printerName: effectivePrinter || selectedPrinter,
             driverType,
             labelConfig: {
               width: labelWidth,
@@ -936,101 +942,20 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
         </div>
       </div>
 
-      {/* Print Preview Dialog with ZPL/TSPL Abstraction Code View */}
-      <Modal isOpen={showPrintModal} onClose={() => setShowPrintModal(false)} title="Thermal Printer Spooler & Driver Command Abstraction">
-        <div className="space-y-4 text-xs">
-          {/* Driver Selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Select Active Printer Profile</label>
-              <select
-                value={selectedPrinter}
-                onChange={(e) => setSelectedPrinter(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 font-mono text-slate-200"
-              >
-                {printersList.length > 0 ? (
-                  printersList.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.driver_type})
-                    </option>
-                  ))
-                ) : (
-                  <option value="Zebra ZD421 Direct Thermal (203 DPI)">Zebra ZD421 Direct Thermal (203 DPI)</option>
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Printer Driver Abstraction Language</label>
-              <div className="flex rounded-lg bg-slate-900 p-1 border border-slate-800">
-                <button
-                  onClick={() => setDriverType('ZEBRA_ZPL')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded ${
-                    driverType === 'ZEBRA_ZPL' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
-                  }`}
-                >
-                  Zebra ZPL II
-                </button>
-                <button
-                  onClick={() => setDriverType('TSPL')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded ${
-                    driverType === 'TSPL' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
-                  }`}
-                >
-                  TSC TSPL
-                </button>
-                <button
-                  onClick={() => setDriverType('WINDOWS')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded ${
-                    driverType === 'WINDOWS' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
-                  }`}
-                >
-                  Win32 RAW
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Command Code Output Box */}
-          <div>
-            <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-400">
-              <span className="flex items-center gap-1">
-                <FileCode className="h-3.5 w-3.5 text-amber-500" />
-                <span>Generated Driver Command Code ({driverType})</span>
-              </span>
-              <span className="font-mono text-amber-400">{copies} Copies • {labelWidth}x{labelHeight}mm</span>
-            </div>
-            <textarea
-              readOnly
-              rows={6}
-              value={driverType === 'ZEBRA_ZPL' ? zplCode : driverType === 'TSPL' ? tsplCode : formattedCmd}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-[11px] text-emerald-400 focus:outline-none"
-            />
-          </div>
-
-          {/* Job Summary Banner */}
-          <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between text-slate-300">
-            <div className="space-y-0.5">
-              <div className="font-bold text-slate-100">{targetBarcodeValue}</div>
-              <div className="text-[10px] text-slate-400">{title} • {barcodeType}</div>
-            </div>
-            <div className="text-right">
-              <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded text-[10px]">
-                READY TO SPOOL
-              </span>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button onClick={() => setShowPrintModal(false)} variant="outline">
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmPrintJob} icon={Printer}>
-              Dispatch Print Job
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Print Preview Engine Modal */}
+      <PrintPreviewModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        barcodeValue={targetBarcodeValue}
+        barcodeType={barcodeType}
+        title={title}
+        previewSvg={previewSvg}
+        previewPng={previewPng}
+        initialLabelWidth={labelWidth}
+        initialLabelHeight={labelHeight}
+        initialCopies={copies}
+        initialDpi={dpi}
+      />
     </div>
   );
 };

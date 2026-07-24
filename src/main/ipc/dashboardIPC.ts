@@ -9,7 +9,7 @@ export function registerDashboardIPC(
 
   registerHandler(IPC_CHANNELS.DASHBOARD_GET_OVERVIEW, async () => {
     try {
-      const overview = dashboardRepository.getOverview();
+      const overview = await dashboardRepository.getOverview();
       return { success: true, data: overview, timestamp: new Date().toISOString() };
     } catch (err) {
       logger.error('IPC Error DASHBOARD_GET_OVERVIEW:', err);

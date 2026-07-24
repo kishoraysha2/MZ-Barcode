@@ -53,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const notifications = [
     { id: 1, title: 'Database WAL Snapshot Complete', time: '10m ago', type: 'success' },
-    { id: 2, title: 'Zebra ZD421 Calibrated (203 DPI)', time: '1h ago', type: 'info' },
+    { id: 2, title: 'Thermal Printer Auto-Calibrated', time: '1h ago', type: 'info' },
     { id: 3, title: 'License Status: Not Configured', time: '3h ago', type: 'warning' },
   ];
 

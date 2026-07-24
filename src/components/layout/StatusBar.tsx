@@ -18,9 +18,10 @@ interface StatusBarProps {
 export const StatusBar: React.FC<StatusBarProps> = ({ edition }) => {
   const [licenseText, setLicenseText] = useState('License: Not Configured');
   const [isValid, setIsValid] = useState(false);
+  const [activePrinterName, setActivePrinterName] = useState('Printer: Scanning...');
 
   useEffect(() => {
-    async function loadLicense() {
+    async function loadLicenseAndPrinter() {
       try {
         const res = await electronBridge.getLicenseStatus();
         if (res.success && res.data?.isActivated) {
@@ -30,12 +31,20 @@ export const StatusBar: React.FC<StatusBarProps> = ({ edition }) => {
           setLicenseText('License: Not Configured');
           setIsValid(false);
         }
+
+        const prnRes = await electronBridge.getPrinters();
+        if (prnRes.success && Array.isArray(prnRes.data) && prnRes.data.length > 0) {
+          const defPrn = prnRes.data.find((p: any) => p.is_default === 1 || p.isDefault) || prnRes.data[0];
+          setActivePrinterName(`${defPrn.name} [READY]`);
+        } else {
+          setActivePrinterName('No Printers Found');
+        }
       } catch (err) {
         setLicenseText('License: Not Configured');
         setIsValid(false);
       }
     }
-    loadLicense();
+    loadLicenseAndPrinter();
   }, []);
 
   return (
@@ -54,7 +63,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ edition }) => {
         {/* Thermal Printer Pill */}
         <div className="flex items-center gap-1.5 text-slate-300">
           <Printer className="h-3 w-3 text-cyan-400" />
-          <span>Zebra ZD421 (203 DPI) [READY]</span>
+          <span>{activePrinterName}</span>
         </div>
 
         {/* Separator */}

@@ -9,11 +9,25 @@ export interface PrinterRow {
   paper_type: string;
   dpi: number;
   port: string;
+  driver_type?: string;
 }
 
 export class PrinterRepository extends BaseRepository<PrinterRow> {
   protected tableName = 'printers';
   private printers: PrinterRow[] = [];
+
+  public syncPrinters(printers: Array<any>): void {
+    this.printers = printers.map((p, idx) => ({
+      id: String(p.id || `prn-${idx + 1}`),
+      name: p.name,
+      is_default: p.is_default ?? (p.isDefault ? 1 : 0),
+      status: p.status || 'ready',
+      paper_type: p.paper_type || p.paperType || 'Continuous Label',
+      dpi: p.dpi || 203,
+      port: p.port || 'USB',
+      driver_type: p.driver_type || p.driverType || 'WINDOWS',
+    }));
+  }
 
   public getDefaultPrinter(): PrinterRow | null {
     return this.printers.find((p) => p.is_default === 1) || (this.printers.length > 0 ? this.printers[0] : null);

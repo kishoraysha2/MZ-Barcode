@@ -9,7 +9,7 @@ import { logger } from '../logger';
 export function registerPrinterIPC(registerHandler: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => void) {
   registerHandler(IPC_CHANNELS.PRINTER_LIST, async (): Promise<IPCResponse<any[]>> => {
     try {
-      const printers = printerRepository.getPrinters();
+      const printers = await PrintService.getPrinters();
       return {
         success: true,
         data: printers,
@@ -23,7 +23,8 @@ export function registerPrinterIPC(registerHandler: (channel: string, handler: (
 
   registerHandler(IPC_CHANNELS.PRINTER_GET_DEFAULT, async (): Promise<IPCResponse<any>> => {
     try {
-      const def = printerRepository.getDefaultPrinter();
+      const printers = await PrintService.getPrinters();
+      const def = printers.find((p) => p.is_default === 1) || (printers.length > 0 ? printers[0] : null);
       return {
         success: true,
         data: def,

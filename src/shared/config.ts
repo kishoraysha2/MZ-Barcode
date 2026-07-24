@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     autoBackupDaily: true,
   },
   printing: {
-    defaultPrinter: 'Zebra ZD421 (203 dpi)',
+    defaultPrinter: 'Canon G3010 series',
     paperWidthMm: 100,
     paperHeightMm: 50,
     dpi: 203,

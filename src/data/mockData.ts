@@ -245,7 +245,7 @@ export const MOCK_LICENSE: LicenseStatus = {
 export const MOCK_PRINTERS: SystemPrinter[] = [
   {
     id: 'prn-1',
-    name: 'Zebra ZD421 Thermal Printer (USB001)',
+    name: 'Canon G3010 series',
     isDefault: true,
     status: 'ready',
     paperType: '50mm x 25mm Continuous Label',
@@ -254,20 +254,11 @@ export const MOCK_PRINTERS: SystemPrinter[] = [
   },
   {
     id: 'prn-2',
-    name: 'SATO CL4NX Plus 300DPI (COM3)',
+    name: 'Microsoft Print to PDF',
     isDefault: false,
     status: 'ready',
-    paperType: '100mm x 150mm Pallet Label',
+    paperType: 'A4 Document',
     dpi: 300,
-    port: 'COM3',
-  },
-  {
-    id: 'prn-3',
-    name: 'Brother QL-820NWB Wireless Spooler',
-    isDefault: false,
-    status: 'offline',
-    paperType: '62mm Black/Red Roll',
-    dpi: 300,
-    port: '192.168.1.104:9100',
+    port: 'PORTPROMPT:',
   },
 ];

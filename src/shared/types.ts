@@ -195,13 +195,15 @@ export interface PrinterProfileItem {
 }
 
 export interface PrinterInfoItem {
-  id: string;
+  id: string | number;
   name: string;
-  isDefault: boolean;
+  isDefault?: boolean;
+  is_default?: number;
+  driver_type?: string;
   status: string;
-  paperType: string;
-  dpi: number;
-  port: string;
+  paperType?: string;
+  dpi?: number;
+  port?: string;
 }
 
 export interface ElectronAPI {

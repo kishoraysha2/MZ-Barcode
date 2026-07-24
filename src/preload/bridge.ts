@@ -1,7 +1,5 @@
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { ElectronAPI, IPCResponse } from '../shared/types';
-import { BarcodeEngine, BarcodeGenerateOptions } from '../main/services/BarcodeEngine';
-import { PrintService, PrintPreviewOptions, PrintJobOptions } from '../main/services/PrintService';
 
 // In-memory array for web simulation fallback when in browser preview
 const webBarcodes: any[] = [];
@@ -108,45 +106,63 @@ async function simulateWebIPCResponse<T>(channel: string, payload?: unknown): Pr
       return {
         success: true,
         data: [
-          { id: 1, name: 'Zebra ZD421 Direct Thermal (203 DPI)', driver_type: 'ZEBRA_ZPL', is_default: 1, dpi: 203, paper_type: 'Continuous 50mm x 25mm', port: 'USB001' },
-          { id: 2, name: 'TSPL Industrial Thermal Printer (300 DPI)', driver_type: 'TSPL', is_default: 0, dpi: 300, paper_type: 'Gap 100mm x 150mm', port: 'USB002' },
-          { id: 3, name: 'Generic Windows Spool Printer Driver', driver_type: 'WINDOWS', is_default: 0, dpi: 203, paper_type: 'Standard Thermal Paper', port: 'LPT1' },
+          { id: 1, name: 'Canon G3010 series', driver_type: 'WINDOWS', is_default: 1, dpi: 203, paper_type: 'Continuous 50mm x 25mm', port: 'USB001' },
+          { id: 2, name: 'Microsoft Print to PDF', driver_type: 'WINDOWS', is_default: 0, dpi: 300, paper_type: 'A4', port: 'PORTPROMPT:' },
         ] as T,
         timestamp,
       };
     case IPC_CHANNELS.BARCODE_GENERATE:
     case IPC_CHANNELS.BARCODE_PREVIEW: {
-      const opts = payload as BarcodeGenerateOptions;
-      const genRes = await BarcodeEngine.generate(opts);
-      if (!genRes.success) {
-        return { success: false, error: { code: 'GENERATE_FAILED', message: genRes.error || 'Barcode generation failed' }, timestamp };
-      }
-      return { success: true, data: genRes as T, timestamp };
+      const opts = (payload as any) || {};
+      const val = opts.value || 'PREVIEW-123';
+      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect width="200" height="80" fill="#ffffff"/><path d="M10 10h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5zm10 0h15v60h-15zm20 0h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5z" fill="#000000"/><text x="100" y="75" font-family="monospace" font-size="10" text-anchor="middle">${val}</text></svg>`;
+      return {
+        success: true,
+        data: {
+          success: true,
+          barcodeValue: val,
+          format: opts.format || 'CODE128',
+          dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
+          svgString: mockSvg,
+        } as T,
+        timestamp,
+      };
     }
     case IPC_CHANNELS.BARCODE_EXPORT: {
-      const opts = payload as BarcodeGenerateOptions & { format?: 'svg' | 'png' };
-      const expRes = await BarcodeEngine.export(opts);
-      if (!expRes.success) {
-        return { success: false, error: { code: 'EXPORT_FAILED', message: expRes.error || 'Barcode export failed' }, timestamp };
-      }
-      return { success: true, data: expRes as T, timestamp };
+      const opts = (payload as any) || {};
+      const val = opts.value || 'EXPORT-123';
+      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect width="200" height="80" fill="#ffffff"/><path d="M10 10h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5zm10 0h15v60h-15zm20 0h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5z" fill="#000000"/><text x="100" y="75" font-family="monospace" font-size="10" text-anchor="middle">${val}</text></svg>`;
+      return {
+        success: true,
+        data: {
+          success: true,
+          filePath: `/downloads/${val}.svg`,
+          dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
+        } as T,
+        timestamp,
+      };
     }
     case IPC_CHANNELS.PRINT_PREVIEW: {
-      const opts = payload as PrintPreviewOptions;
-      const printRes = await PrintService.generatePreview(opts);
-      if (!printRes.success) {
-        return { success: false, error: { code: 'PREVIEW_FAILED', message: printRes.error || 'Print preview failed' }, timestamp };
-      }
-      return { success: true, data: printRes as T, timestamp };
+      const opts = (payload as any) || {};
+      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect width="200" height="100" fill="#ffffff" stroke="#000"/><text x="10" y="30" font-size="12">PRINT PREVIEW</text></svg>`;
+      return {
+        success: true,
+        data: {
+          success: true,
+          previewUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
+          printerName: opts.printerName || 'Default Printer',
+        } as T,
+        timestamp,
+      };
     }
     case IPC_CHANNELS.PRINT_CREATE_JOB: {
-      const p = payload as PrintJobOptions;
+      const p = (payload as any) || {};
       return {
         success: true,
         data: {
           jobId: Math.floor(Math.random() * 9000) + 1000,
           status: 'PENDING',
-          printerName: p.printerName,
+          printerName: p.printerName || 'Default Printer',
           copies: p.copies || 1,
         } as T,
         timestamp,
@@ -259,18 +275,23 @@ async function simulateWebIPCResponse<T>(channel: string, payload?: unknown): Pr
         data: [] as T,
         timestamp,
       };
-    case IPC_CHANNELS.PRINTER_GET_DEFAULT:
+    case IPC_CHANNELS.PRINTER_GET_DEFAULT: {
       return {
         success: true,
-        data: null as T,
+        data: { id: 1, name: 'Canon G3010 series', driver_type: 'WINDOWS', is_default: 1, dpi: 203, status: 'ready', port: 'USB001' } as T,
         timestamp,
       };
-    case IPC_CHANNELS.PRINTER_LIST:
+    }
+    case IPC_CHANNELS.PRINTER_LIST: {
       return {
         success: true,
-        data: [] as T,
+        data: [
+          { id: 1, name: 'Canon G3010 series', driver_type: 'WINDOWS', is_default: 1, dpi: 203, status: 'ready', port: 'USB001' },
+          { id: 2, name: 'Microsoft Print to PDF', driver_type: 'WINDOWS', is_default: 0, dpi: 300, status: 'ready', port: 'PORTPROMPT:' },
+        ] as T,
         timestamp,
       };
+    }
     case IPC_CHANNELS.LICENSE_GET_STATUS:
       return {
         success: true,

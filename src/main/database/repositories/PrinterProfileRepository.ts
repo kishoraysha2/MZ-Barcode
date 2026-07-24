@@ -50,8 +50,8 @@ export class PrinterProfileRepository extends BaseRepository<PrinterProfileRow> 
   private seedDefaultProfiles() {
     const defaults = [
       {
-        name: 'Zebra ZD421 Direct Thermal (203 DPI)',
-        driver_type: 'ZEBRA_ZPL',
+        name: 'Canon G3010 series',
+        driver_type: 'WINDOWS',
         is_default: 1,
         dpi: 203,
         paper_type: 'Continuous 50mm x 25mm',
@@ -59,12 +59,12 @@ export class PrinterProfileRepository extends BaseRepository<PrinterProfileRow> 
         config_json: JSON.stringify({ darkness: 15, printSpeed: 4 }),
       },
       {
-        name: 'TSPL Industrial Thermal Printer (300 DPI)',
-        driver_type: 'TSPL',
+        name: 'Microsoft Print to PDF',
+        driver_type: 'WINDOWS',
         is_default: 0,
         dpi: 300,
-        paper_type: 'Gap 100mm x 150mm',
-        port: 'USB002',
+        paper_type: 'A4',
+        port: 'PORTPROMPT:',
         config_json: JSON.stringify({ density: 10, speed: 3 }),
       },
       {
