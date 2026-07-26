@@ -1,4 +1,4 @@
-import { dbConnection } from './connection';
+import { dbConnection, SQLiteConnection } from './connection';
 import { ALL_MIGRATIONS, Migration } from './migrations';
 import { logger } from '../logger';
 
@@ -33,18 +33,46 @@ export class MigrationManager {
     const status = this.getStatus();
     logger.info(`[Migration Manager] Current DB Version: ${status.currentVersion}, Required Version: ${status.requiredVersion}`);
 
-    if (status.pendingCount === 0) {
-      logger.info('[Migration Manager] Database schema is up to date.');
-      return;
+    if (status.pendingCount > 0) {
+      const pending = ALL_MIGRATIONS.filter((m) => m.version > status.currentVersion).sort((a, b) => a.version - b.version);
+
+      for (const migration of pending) {
+        this.applyMigration(migration);
+      }
+
+      logger.info(`[Migration Manager] All migrations applied. New DB Version: ${dbConnection.getUserVersion()}`);
+    } else {
+      logger.info('[Migration Manager] Database schema version is up to date.');
     }
 
-    const pending = ALL_MIGRATIONS.filter((m) => m.version > status.currentVersion).sort((a, b) => a.version - b.version);
+    // Always run schema integrity check to guarantee required columns on existing tables exist
+    this.ensureSchemaIntegrity();
+  }
 
-    for (const migration of pending) {
-      this.applyMigration(migration);
+  private ensureSchemaIntegrity(): void {
+    try {
+      const tableExists = dbConnection.get<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='print_jobs'"
+      );
+      if (!tableExists) return;
+
+      const columns = dbConnection.all<{ name: string }>("PRAGMA table_info('print_jobs')").map((col) => col.name);
+
+      if (!columns.includes('zpl_output')) {
+        logger.info('[Migration Manager] Repairing schema: Adding missing zpl_output column to print_jobs');
+        dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN zpl_output TEXT;');
+      }
+      if (!columns.includes('tspl_output')) {
+        logger.info('[Migration Manager] Repairing schema: Adding missing tspl_output column to print_jobs');
+        dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN tspl_output TEXT;');
+      }
+      if (!columns.includes('job_metadata_json')) {
+        logger.info('[Migration Manager] Repairing schema: Adding missing job_metadata_json column to print_jobs');
+        dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN job_metadata_json TEXT DEFAULT '{}';");
+      }
+    } catch (err) {
+      logger.error('[Migration Manager] Schema integrity check error:', err);
     }
-
-    logger.info(`[Migration Manager] All migrations applied. New DB Version: ${dbConnection.getUserVersion()}`);
   }
 
   private applyMigration(migration: Migration): void {
@@ -52,7 +80,11 @@ export class MigrationManager {
 
     try {
       dbConnection.transaction(() => {
-        dbConnection.exec(migration.up);
+        if (typeof migration.up === 'function') {
+          migration.up(dbConnection);
+        } else if (typeof migration.up === 'string' && migration.up.trim()) {
+          dbConnection.exec(migration.up);
+        }
         dbConnection.setUserVersion(migration.version);
       });
 
@@ -80,7 +112,11 @@ export class MigrationManager {
 
     try {
       dbConnection.transaction(() => {
-        dbConnection.exec(migrationToRollback.down);
+        if (typeof migrationToRollback.down === 'function') {
+          migrationToRollback.down(dbConnection);
+        } else if (typeof migrationToRollback.down === 'string' && migrationToRollback.down.trim()) {
+          dbConnection.exec(migrationToRollback.down);
+        }
         dbConnection.setUserVersion(currentVersion - 1);
       });
 
@@ -93,3 +129,4 @@ export class MigrationManager {
 }
 
 export const migrationManager = new MigrationManager();
+

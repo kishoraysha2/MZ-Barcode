@@ -41,12 +41,32 @@ export class PrintRepository extends BaseRepository<PrintJobRow> {
     });
   }
 
-  public markCompleted(id: number): QueryResult {
+  public updateJobStatus(id: number, status: 'PENDING' | 'SPOOLING' | 'PRINTED' | 'FAILED' | 'CANCELLED', errorMsg?: string): QueryResult {
+    const isTerminal = status === 'PRINTED' || status === 'FAILED' || status === 'CANCELLED';
     return QueryBuilder.update(
       this.tableName,
-      { status: 'COMPLETED', completed_at: new Date().toISOString() },
+      {
+        status,
+        ...(isTerminal ? { completed_at: new Date().toISOString() } : {}),
+      },
       { id }
     );
+  }
+
+  public markCompleted(id: number): QueryResult {
+    return this.updateJobStatus(id, 'PRINTED');
+  }
+
+  public markPrinted(id: number): QueryResult {
+    return this.updateJobStatus(id, 'PRINTED');
+  }
+
+  public markFailed(id: number, errorMsg?: string): QueryResult {
+    return this.updateJobStatus(id, 'FAILED', errorMsg);
+  }
+
+  public markCancelled(id: number): QueryResult {
+    return this.updateJobStatus(id, 'CANCELLED');
   }
 
   public getPendingJobs(): PrintJobRow[] {

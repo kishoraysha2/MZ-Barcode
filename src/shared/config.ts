@@ -13,13 +13,22 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     autoBackupDaily: true,
   },
   printing: {
-    defaultPrinter: 'Canon G3010 series',
-    paperWidthMm: 100,
-    paperHeightMm: 50,
+    defaultPrinter: 'Default',
+    printMode: 'DIALOG',
+    silentPrinting: false,
+    rememberLastPrinter: true,
+    paperWidthMm: 50,
+    paperHeightMm: 25,
     dpi: 203,
+    copies: 1,
+    orientation: 'PORTRAIT',
+    paperSize: 'CUSTOM',
+    margins: { top: 2, right: 2, bottom: 2, left: 2 },
+    printBackground: true,
   },
   security: {
     sessionTimeoutMinutes: 30,
     auditLogging: true,
   },
 };
+

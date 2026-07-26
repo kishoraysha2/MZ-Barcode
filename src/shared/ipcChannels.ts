@@ -45,6 +45,13 @@ export enum IPC_CHANNELS {
 
   // Label Template IPC
   TEMPLATE_LIST = 'ipc:template:list',
+  TEMPLATE_GET = 'ipc:template:get',
+  TEMPLATE_CREATE = 'ipc:template:create',
+  TEMPLATE_UPDATE = 'ipc:template:update',
+  TEMPLATE_DELETE = 'ipc:template:delete',
+  TEMPLATE_DUPLICATE = 'ipc:template:duplicate',
+  TEMPLATE_EXPORT = 'ipc:template:export',
+  TEMPLATE_IMPORT = 'ipc:template:import',
 
   // Sprint 5 Barcode & Print Foundation
   BARCODE_GENERATE = 'barcode:generate',

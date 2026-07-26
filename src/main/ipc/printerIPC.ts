@@ -125,13 +125,41 @@ export function registerPrinterIPC(registerHandler: (channel: string, handler: (
         },
       });
 
+      const jobId = Number(dbRes.lastInsertRowid);
+
+      // Execute physical print via Electron spooler / webContents.print
+      const printResult = await PrintService.executePhysicalPrint({
+        ...opts,
+        jobId,
+        labelConfig,
+      });
+
+      if (printResult.status === 'FAILED') {
+        return {
+          success: false,
+          data: {
+            jobId,
+            status: printResult.status,
+            printerName: opts.printerName,
+            copies: opts.copies || 1,
+            error: printResult.error,
+          },
+          error: {
+            code: 'PRINT_FAILED',
+            message: printResult.error || 'Print spooler failed to output document',
+          },
+          timestamp: new Date().toISOString(),
+        };
+      }
+
       return {
         success: true,
         data: {
-          jobId: dbRes.lastInsertRowid,
-          status: 'PENDING',
+          jobId,
+          status: printResult.status,
           printerName: opts.printerName,
           copies: opts.copies || 1,
+          error: printResult.error,
         },
         timestamp: new Date().toISOString(),
       };

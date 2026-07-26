@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Barcode,
   Printer,
@@ -15,6 +15,8 @@ import { Card, Button, Modal } from '../components/common/UIComponents';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { BarcodeRecord } from '../types';
 import { electronBridge } from '../preload/bridge';
+
+import { normalizeSvg } from '../utils/SVGNormalizer';
 
 interface BarcodeGeneratorViewProps {
   onAddBarcode: (record: BarcodeRecord) => void;
@@ -63,6 +65,108 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [generatedSuccessMsg, setGeneratedSuccessMsg] = useState<string | null>(null);
+
+  const previewCardContainerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 400, height: 320 });
+  const [previewMode, setPreviewMode] = useState<'fit' | 'actual' | 'fitWidth' | 'fitHeight'>('fit');
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  useEffect(() => {
+    if (!previewCardContainerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setContainerSize({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          });
+        }
+      }
+    });
+    observer.observe(previewCardContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const formattedPreviewSvg = useMemo(() => {
+    return normalizeSvg(previewSvg);
+  }, [previewSvg]);
+
+  const fitDimensions = useMemo(() => {
+    const wMm = labelWidth || 50;
+    const hMm = labelHeight || 25;
+    const labelAspect = wMm / hMm;
+
+    // Physical scale at 96 DPI screen representation (~3.7795 px/mm)
+    const physW = wMm * 3.7795;
+    const physH = hMm * 3.7795;
+
+    const availW = Math.max(160, containerSize.width - 32);
+    const availH = Math.max(180, Math.min(480, containerSize.height > 100 ? containerSize.height - 80 : 340));
+
+    let baseW = physW;
+    let baseH = physH;
+
+    if (previewMode === 'fit') {
+      const targetW = availW;
+      const targetH = availH;
+      if (targetW / targetH > labelAspect) {
+        baseH = targetH;
+        baseW = baseH * labelAspect;
+      } else {
+        baseW = targetW;
+        baseH = baseW / labelAspect;
+      }
+    } else if (previewMode === 'fitWidth') {
+      baseW = availW;
+      baseH = baseW / labelAspect;
+    } else if (previewMode === 'fitHeight') {
+      baseH = availH;
+      baseW = baseH * labelAspect;
+    } else if (previewMode === 'actual') {
+      baseW = physW;
+      baseH = physH;
+    }
+
+    const scale = zoomLevel / 100;
+    return { width: Math.round(baseW * scale), height: Math.round(baseH * scale) };
+  }, [containerSize.width, containerSize.height, labelWidth, labelHeight, previewMode, zoomLevel]);
+
+  // Console Runtime Debug Logging
+  useEffect(() => {
+    const containerW = containerSize.width;
+    const containerH = containerSize.height;
+    const physWmm = labelWidth || 50;
+    const physHmm = labelHeight || 25;
+    const convertedWpx = physWmm * 3.7795;
+    const convertedHpx = physHmm * 3.7795;
+    const renderedW = fitDimensions.width;
+    const renderedH = fitDimensions.height;
+    const fitScale = (renderedW / Math.max(1, convertedWpx)).toFixed(4);
+
+    const elem = previewCardContainerRef.current;
+    const domW = elem ? elem.clientWidth : 0;
+    const domH = elem ? elem.clientHeight : 0;
+    const computedStyle = elem ? window.getComputedStyle(elem) : null;
+    const transform = computedStyle ? computedStyle.transform : 'none';
+
+    console.log('[RUNTIME DEBUG - BARCODE PREVIEW VIEWPORT]', {
+      containerWidthPx: containerW,
+      containerHeightPx: containerH,
+      physicalWidthMm: physWmm,
+      physicalHeightMm: physHmm,
+      convertedWidthPx: Math.round(convertedWpx),
+      convertedHeightPx: Math.round(convertedHpx),
+      computedFitScale: fitScale,
+      finalRenderedSvgWidth: `${renderedW}px (100%)`,
+      finalRenderedSvgHeight: `${renderedH}px (100%)`,
+      actualDomWidth: domW,
+      actualDomHeight: domH,
+      cssTransformsApplied: transform,
+      scaleApplied: `scale(${fitScale})`,
+      zoomValue: `${zoomLevel}% (Mode: ${previewMode})`,
+      preserveAspectRatioOverridden: formattedPreviewSvg.includes('preserveAspectRatio="xMidYMid meet"'),
+    });
+  }, [containerSize.width, containerSize.height, labelWidth, labelHeight, fitDimensions.width, fitDimensions.height, zoomLevel, previewMode, formattedPreviewSvg]);
 
   // Print Preview & Spooling State
   const [driverType, setDriverType] = useState<'WINDOWS' | 'ZEBRA_ZPL' | 'TSPL'>('ZEBRA_ZPL');
@@ -146,8 +250,8 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
         if (!isSubscribed) return;
 
         if (res.success && res.data) {
-          setPreviewSvg(res.data.svg || '');
-          setPreviewPng(res.data.pngDataUrl || '');
+          setPreviewSvg(res.data.svg || res.data.svgString || res.data.previewSvg || '');
+          setPreviewPng(res.data.pngDataUrl || res.data.dataUrl || '');
           setValidationError(null);
         } else {
           setValidationError(res.error?.message || 'Invalid barcode format or value');
@@ -771,7 +875,49 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
         {/* Right Preview & Export Panel (5 Cols) */}
         <div className="lg:col-span-5 space-y-6">
           <Card title="Live Thermal Label Preview" subtitle="Instant SVG/PNG Vector Barcode Engine Preview">
-            <div className="bg-slate-100 dark:bg-slate-950 p-6 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center">
+            <div
+              ref={previewCardContainerRef}
+              className="bg-slate-100 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center h-full flex-1 w-full relative overflow-hidden"
+            >
+              {/* Preview Control Toolbar */}
+              <div className="w-full flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-800 mb-4 text-xs gap-2 flex-wrap shadow-xs">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Mode:</span>
+                    <select
+                      value={previewMode}
+                      onChange={(e) => setPreviewMode(e.target.value as any)}
+                      className="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs font-medium focus:border-amber-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="fit">Fit to View</option>
+                      <option value="actual">Actual Size (100%)</option>
+                      <option value="fitWidth">Fit Width</option>
+                      <option value="fitHeight">Fit Height</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-2">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Zoom:</span>
+                    <select
+                      value={zoomLevel}
+                      onChange={(e) => setZoomLevel(Number(e.target.value))}
+                      className="bg-slate-50 dark:bg-slate-950 text-amber-600 dark:text-amber-400 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono font-bold focus:border-amber-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value={50}>50%</option>
+                      <option value={75}>75%</option>
+                      <option value={100}>100%</option>
+                      <option value={125}>125%</option>
+                      <option value={150}>150%</option>
+                      <option value={200}>200%</option>
+                      <option value={400}>400%</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {labelWidth} × {labelHeight} mm
+                </div>
+              </div>
               {validationError ? (
                 <div className="w-full p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-center space-y-2">
                   <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
@@ -779,24 +925,31 @@ export const BarcodeGeneratorView: React.FC<BarcodeGeneratorViewProps> = ({
                   <p className="text-[11px] text-slate-400 font-mono">{validationError}</p>
                 </div>
               ) : (
-                /* Thermal Physical Label Container */
-                <div className="w-full max-w-xs bg-white text-slate-900 border-2 border-slate-300 rounded-lg p-4 shadow-lg text-center font-sans relative overflow-hidden">
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">
+                /* Thermal Physical Label Container - Dynamically Scaled (Fit to View) */
+                <div
+                  style={{
+                    width: `${fitDimensions.width}px`,
+                    height: `${fitDimensions.height}px`,
+                    transition: 'width 0.15s ease-out, height 0.15s ease-out',
+                  }}
+                  className="bg-white text-slate-900 border-2 border-slate-300 rounded-lg p-3 shadow-lg font-sans relative overflow-hidden flex flex-col justify-start shrink-0"
+                >
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-1 mb-1 truncate text-center">
                     MZ INDUSTRIAL LABEL • {labelWidth}x{labelHeight}mm
                   </div>
 
-                  <div className="text-xs font-black text-slate-900 line-clamp-1">{title || 'Sample Product Name'}</div>
-                  <div className="text-[10px] text-slate-500">{category || 'General'}</div>
+                  <div className="text-xs font-black text-slate-900 line-clamp-1 text-center">{title || 'Sample Product Name'}</div>
+                  <div className="text-[10px] text-slate-500 text-center">{category || 'General'}</div>
 
                   {/* Render Live Vector/PNG Graphic */}
-                  <div className="my-3 flex flex-col items-center justify-center min-h-[90px]">
-                    {previewSvg ? (
+                  <div className="my-1 flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
+                    {formattedPreviewSvg ? (
                       <div
-                        className="w-full flex justify-center [&>svg]:max-w-full [&>svg]:h-auto"
-                        dangerouslySetInnerHTML={{ __html: previewSvg }}
+                        className="w-full h-full flex justify-center items-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:block opacity-100"
+                        dangerouslySetInnerHTML={{ __html: formattedPreviewSvg }}
                       />
                     ) : previewPng ? (
-                      <img src={previewPng} alt="Barcode Preview" className="max-w-full h-auto" />
+                      <img src={previewPng} alt="Barcode Preview" className="max-w-full max-h-full object-contain" />
                     ) : (
                       <div className="text-xs text-slate-400 font-mono">Generating barcode...</div>
                     )}

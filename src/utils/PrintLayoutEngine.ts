@@ -4,6 +4,8 @@
  * printable area calculations, and CSS print styling.
  */
 
+import { normalizeSvg } from './SVGNormalizer';
+
 export interface PageDimensions {
   widthMm: number;
   heightMm: number;
@@ -35,6 +37,21 @@ export interface PaperConfig {
   margins: MarginSettings;
   marginPreset: MarginPreset;
   dpi: number;
+}
+
+export interface LabelHtmlOptions {
+  labelConfig: {
+    width: number;
+    height: number;
+    orientation?: Orientation;
+    margins?: MarginSettings | { top?: number; right?: number; bottom?: number; left?: number; topMm?: number; rightMm?: number; bottomMm?: number; leftMm?: number };
+    copies?: number;
+  };
+  barcodeValue: string;
+  barcodeType: string;
+  title?: string;
+  svgContent?: string;
+  pngDataUrl?: string;
 }
 
 export class PrintLayoutEngine {
@@ -78,9 +95,9 @@ export class PrintLayoutEngine {
     customWidthMm?: number,
     customHeightMm?: number
   ): PageDimensions {
-    let base = this.PAPER_PRESETS[preset] || this.PAPER_PRESETS['50x25'];
-    let w = preset === 'CUSTOM' && customWidthMm ? customWidthMm : base.widthMm;
-    let h = preset === 'CUSTOM' && customHeightMm ? customHeightMm : base.heightMm;
+    const base = this.PAPER_PRESETS[preset] || this.PAPER_PRESETS['50x25'];
+    const w = preset === 'CUSTOM' && customWidthMm ? customWidthMm : base.widthMm;
+    const h = preset === 'CUSTOM' && customHeightMm ? customHeightMm : base.heightMm;
 
     if (orientation === 'LANDSCAPE') {
       return { widthMm: Math.max(w, h), heightMm: Math.min(w, h) };
@@ -115,15 +132,158 @@ export class PrintLayoutEngine {
     pageHeightPx: number,
     containerWidthPx: number,
     containerHeightPx: number,
-    paddingPx: number = 20
+    paddingPx: number = 20,
+    fillRatio: number = 1.0
   ): number {
-    const availW = Math.max(100, containerWidthPx - paddingPx * 2);
-    const availH = Math.max(100, containerHeightPx - paddingPx * 2);
+    const availW = Math.max(50, containerWidthPx - paddingPx * 2);
+    const availH = Math.max(50, containerHeightPx - paddingPx * 2);
 
-    const scaleX = availW / pageWidthPx;
-    const scaleY = availH / pageHeightPx;
+    const targetW = availW * fillRatio;
+    const targetH = availH * fillRatio;
 
-    return Math.min(scaleX, scaleY, 2.0); // Cap max fit scale to 2x
+    const scaleX = targetW / pageWidthPx;
+    const scaleY = targetH / pageHeightPx;
+
+    const fitScale = Math.min(scaleX, scaleY);
+    return Math.max(0.1, fitScale);
+  }
+
+  /**
+   * Build unified, single-source-of-truth HTML document for both Preview and Print execution
+   */
+  public static buildLabelHtml(options: LabelHtmlOptions): string {
+    const { labelConfig, barcodeValue, barcodeType, title, svgContent, pngDataUrl } = options;
+
+    const w = labelConfig.width || 50;
+    const h = labelConfig.height || 25;
+    const orientation = labelConfig.orientation || 'PORTRAIT';
+    const copies = labelConfig.copies || 1;
+
+    const m = labelConfig.margins || {};
+    const topMm = (m as MarginSettings).topMm ?? (m as any).top ?? 0;
+    const rightMm = (m as MarginSettings).rightMm ?? (m as any).right ?? 0;
+    const bottomMm = (m as MarginSettings).bottomMm ?? (m as any).bottom ?? 0;
+    const leftMm = (m as MarginSettings).leftMm ?? (m as any).left ?? 0;
+
+    let pngUrl = pngDataUrl || '';
+    if (!pngUrl && svgContent) {
+      const match = svgContent.match(/href=["'](data:image\/png;base64,[^"']+)["']/i) || svgContent.match(/src=["'](data:image\/png;base64,[^"']+)["']/i);
+      if (match && match[1]) {
+        pngUrl = match[1];
+      }
+    }
+
+    let normalizedGraphic = '';
+    if (pngUrl) {
+      normalizedGraphic = `<img src="${pngUrl}" alt="Barcode Graphic" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" />`;
+    } else if (svgContent) {
+      normalizedGraphic = normalizeSvg(svgContent);
+    } else {
+      normalizedGraphic = `<div style="font-family: monospace; font-size: 11pt; font-weight: bold; border: 2px solid black; padding: 4px; text-align: center;">*${barcodeValue}*</div>`;
+    }
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Print Label - ${barcodeValue}</title>
+  <style>
+    @page {
+      size: ${w}mm ${h}mm ${orientation === 'LANDSCAPE' ? 'landscape' : 'portrait'};
+      margin: 0;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: ${w}mm !important;
+      height: ${h}mm !important;
+      overflow: hidden !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #mz-printable-document-root {
+      width: ${w}mm;
+      height: ${h}mm;
+      padding: ${topMm}mm ${rightMm}mm ${bottomMm}mm ${leftMm}mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-sizing: border-box;
+      background: #ffffff;
+      overflow: hidden;
+      position: relative;
+    }
+    .label-header {
+      width: 100%;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #1e293b;
+      font-size: 9.5pt;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 2px;
+    }
+    .label-barcode-container {
+      flex: 1 1 0%;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 2px 0;
+      overflow: hidden;
+    }
+    .label-barcode-container svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      display: block !important;
+    }
+    .label-barcode-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .label-footer {
+      width: 100%;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 7.5pt;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-left: 2px;
+      padding-right: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="mz-printable-document-root">
+    <div class="label-header">${title || ''}</div>
+    <div class="label-barcode-container">
+      ${normalizedGraphic}
+    </div>
+    <div class="label-footer">
+      <span>${barcodeType}</span>
+      <span>${copies} COPIES</span>
+    </div>
+  </div>
+</body>
+</html>`;
   }
 
   /**
@@ -170,3 +330,4 @@ export class PrintLayoutEngine {
     `;
   }
 }
+

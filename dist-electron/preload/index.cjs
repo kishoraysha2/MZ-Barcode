@@ -27,6 +27,100 @@ module.exports = __toCommonJS(index_exports);
 // src/preload/bridge.ts
 var webBarcodes = [];
 var barcodeAutoId = Date.now();
+var webTemplates = [
+  {
+    id: "sys_tpl_40x20",
+    name: "Standard Retail Tag (40x20mm)",
+    description: "Compact retail price tag with barcode and price binding",
+    category: "RETAIL",
+    widthMm: 40,
+    heightMm: 20,
+    marginTopMm: 1,
+    marginBottomMm: 1,
+    marginLeftMm: 1,
+    marginRightMm: 1,
+    paddingMm: 1,
+    gapMm: 0,
+    orientation: "PORTRAIT",
+    dpi: 203,
+    isSystem: true,
+    isDefault: false,
+    isActive: true,
+    elements: [
+      {
+        id: "el_1",
+        templateId: "sys_tpl_40x20",
+        type: "TEXT",
+        name: "Company Name",
+        xMm: 2,
+        yMm: 1.5,
+        widthMm: 36,
+        heightMm: 3.5,
+        zIndex: 0,
+        rotation: 0,
+        alignment: "CENTER",
+        isLocked: true,
+        isHidden: false,
+        isPrintable: true,
+        properties: { fontFamily: "Arial", fontSize: 8, fontWeight: "bold", staticValue: "MZ RETAIL STORE" }
+      },
+      {
+        id: "el_2",
+        templateId: "sys_tpl_40x20",
+        type: "BARCODE",
+        name: "Product Barcode",
+        xMm: 2,
+        yMm: 5.5,
+        widthMm: 36,
+        heightMm: 9,
+        zIndex: 1,
+        rotation: 0,
+        alignment: "CENTER",
+        isLocked: true,
+        isHidden: false,
+        isPrintable: true,
+        properties: { barcodeFormat: "CODE128", quietZone: 1, dataBinding: "SKU", staticValue: "100012345", showText: true }
+      },
+      {
+        id: "el_3",
+        templateId: "sys_tpl_40x20",
+        type: "TEXT",
+        name: "Price Tag",
+        xMm: 2,
+        yMm: 15,
+        widthMm: 36,
+        heightMm: 4,
+        zIndex: 2,
+        rotation: 0,
+        alignment: "CENTER",
+        isLocked: true,
+        isHidden: false,
+        isPrintable: true,
+        properties: { fontFamily: "Arial", fontSize: 10, fontWeight: "bold", dataBinding: "Price", staticValue: "$19.99" }
+      }
+    ]
+  },
+  {
+    id: "sys_tpl_50x25",
+    name: "Standard Product Label (50x25mm)",
+    description: "Standard product and inventory label with barcode and product title",
+    category: "RETAIL",
+    widthMm: 50,
+    heightMm: 25,
+    marginTopMm: 1,
+    marginBottomMm: 1,
+    marginLeftMm: 1,
+    marginRightMm: 1,
+    paddingMm: 1,
+    gapMm: 0,
+    orientation: "PORTRAIT",
+    dpi: 203,
+    isSystem: true,
+    isDefault: true,
+    isActive: true,
+    elements: []
+  }
+];
 var electronBridge = {
   databaseInit: async () => invokeIPC("ipc:database:init" /* DATABASE_INIT */),
   getDatabaseStatus: async () => invokeIPC("ipc:database:status" /* DATABASE_STATUS */),
@@ -78,13 +172,92 @@ var electronBridge = {
   createUser: async (user) => invokeIPC("ipc:user:create" /* USER_CREATE */, user),
   updateUserStatus: async (params) => invokeIPC("ipc:user:update_status" /* USER_UPDATE_STATUS */, params),
   getRoles: async () => invokeIPC("ipc:role:list" /* ROLE_LIST */),
-  getPermissions: async (roleId) => invokeIPC("ipc:permissions:get" /* PERMISSIONS_GET */, { roleId })
+  getPermissions: async (roleId) => invokeIPC("ipc:permissions:get" /* PERMISSIONS_GET */, { roleId }),
+  // Label Template IPC (Sprint 6.2.1)
+  getLabelTemplates: async () => invokeIPC("ipc:template:list" /* TEMPLATE_LIST */),
+  getLabelTemplate: async (id) => invokeIPC("ipc:template:get" /* TEMPLATE_GET */, id),
+  createLabelTemplate: async (dto) => invokeIPC("ipc:template:create" /* TEMPLATE_CREATE */, dto),
+  updateLabelTemplate: async (dto) => {
+    console.log("[TRACE 2.1] bridge.updateLabelTemplate() invoked with dto:", dto);
+    return invokeIPC("ipc:template:update" /* TEMPLATE_UPDATE */, dto);
+  },
+  deleteLabelTemplate: async (id) => invokeIPC("ipc:template:delete" /* TEMPLATE_DELETE */, id),
+  duplicateLabelTemplate: async (dto) => invokeIPC("ipc:template:duplicate" /* TEMPLATE_DUPLICATE */, dto),
+  exportLabelTemplate: async (id) => invokeIPC("ipc:template:export" /* TEMPLATE_EXPORT */, id),
+  importLabelTemplate: async (jsonContent) => invokeIPC("ipc:template:import" /* TEMPLATE_IMPORT */, jsonContent)
 };
 async function invokeIPC(channel, payload) {
+  console.log(`[TRACE 2.2] invokeIPC channel: ${channel}`);
   if (typeof window !== "undefined" && window.ipcRenderer) {
-    return window.ipcRenderer.invoke(channel, payload);
+    console.log(`[TRACE 2.3] Dispatching via Electron window.ipcRenderer.invoke(${channel})`);
+    const res2 = await window.ipcRenderer.invoke(channel, payload);
+    console.log(`[TRACE 2.3.1] Electron window.ipcRenderer.invoke response for ${channel}:`, res2);
+    return res2;
   }
-  return simulateWebIPCResponse(channel, payload);
+  console.log(`[TRACE 2.4] Falling back to simulateWebIPCResponse for ${channel}`);
+  const res = await simulateWebIPCResponse(channel, payload);
+  console.log(`[TRACE 2.4.1] simulateWebIPCResponse response for ${channel}:`, res);
+  return res;
+}
+function generateMockBarcodeSvg(val, format = "CODE128", width = 200, height = 80) {
+  const is2D = ["QR_CODE", "QR", "DATAMATRIX", "AZTEC", "PDF417"].includes(format.toUpperCase());
+  if (is2D) {
+    const size = Math.min(width, height);
+    const boxSize = size * 0.85;
+    const startX2 = (width - boxSize) / 2;
+    const startY = (height - boxSize) / 2;
+    const modules = 21;
+    const mw2 = boxSize / modules;
+    let pathD2 = "";
+    const drawFinder = (mx, my) => {
+      pathD2 += `M${(startX2 + mx * mw2).toFixed(2)} ${(startY + my * mw2).toFixed(2)}h${(7 * mw2).toFixed(2)}v${(7 * mw2).toFixed(2)}h-${(7 * mw2).toFixed(2)}z `;
+      pathD2 += `M${(startX2 + (mx + 1) * mw2).toFixed(2)} ${(startY + (my + 1) * mw2).toFixed(2)}h${(5 * mw2).toFixed(2)}v${(5 * mw2).toFixed(2)}h-${(5 * mw2).toFixed(2)}z `;
+      pathD2 += `M${(startX2 + (mx + 2) * mw2).toFixed(2)} ${(startY + (my + 2) * mw2).toFixed(2)}h${(3 * mw2).toFixed(2)}v${(3 * mw2).toFixed(2)}h-${(3 * mw2).toFixed(2)}z `;
+    };
+    drawFinder(0, 0);
+    drawFinder(14, 0);
+    drawFinder(0, 14);
+    for (let r = 0; r < modules; r++) {
+      for (let c = 0; c < modules; c++) {
+        if (r < 7 && c < 7 || r < 7 && c >= 14 || r >= 14 && c < 7) continue;
+        const hash = (r * 31 + c * 17 + (val.charCodeAt((r + c) % val.length) || 0)) % 3;
+        if (hash === 0) {
+          pathD2 += `M${(startX2 + c * mw2).toFixed(2)} ${(startY + r * mw2).toFixed(2)}h${mw2.toFixed(2)}v${mw2.toFixed(2)}h-${mw2.toFixed(2)}z `;
+        }
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" style="background-color:#ffffff;"><rect width="${width}" height="${height}" fill="#ffffff"/><path d="${pathD2}" fill="#000000" fill-rule="evenodd"/><text x="${width / 2}" y="${startY + boxSize + 12}" font-family="monospace" font-size="10" text-anchor="middle" fill="#000000" font-weight="bold">${val}</text></svg>`;
+  }
+  const targetBarWidth = width * 0.85;
+  const startX = (width - targetBarWidth) / 2;
+  const barTop = 8;
+  const barHeight = height - 24;
+  const pattern = [];
+  pattern.push([2, true], [1, false], [1, true], [2, false]);
+  const cleanVal = val || "PREVIEW-123";
+  for (let i = 0; i < cleanVal.length; i++) {
+    const code = cleanVal.charCodeAt(i);
+    const b1 = code % 3 + 1;
+    const s1 = (code >> 1) % 3 + 1;
+    const b2 = (code >> 2) % 3 + 1;
+    const s2 = (code >> 3) % 2 + 1;
+    const b3 = (code >> 4) % 3 + 1;
+    const s3 = (code >> 5) % 2 + 1;
+    pattern.push([b1, true], [s1, false], [b2, true], [s2, false], [b3, true], [s3, false]);
+  }
+  pattern.push([2, true], [1, false], [3, true]);
+  const totalModules = pattern.reduce((sum, p) => sum + p[0], 0);
+  const mw = targetBarWidth / totalModules;
+  let pathD = "";
+  let currX = startX;
+  for (const [modCount, isBar] of pattern) {
+    const w = modCount * mw;
+    if (isBar) {
+      pathD += `M${currX.toFixed(2)} ${barTop}h${w.toFixed(2)}v${barHeight}h-${w.toFixed(2)}z `;
+    }
+    currX += w;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" style="background-color:#ffffff;"><rect width="${width}" height="${height}" fill="#ffffff"/><path d="${pathD}" fill="#000000"/><text x="${width / 2}" y="${height - 6}" font-family="monospace" font-size="10" text-anchor="middle" fill="#000000" font-weight="bold">${cleanVal}</text></svg>`;
 }
 async function simulateWebIPCResponse(channel, payload) {
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
@@ -114,15 +287,19 @@ async function simulateWebIPCResponse(channel, payload) {
     case "barcode:preview" /* BARCODE_PREVIEW */: {
       const opts = payload || {};
       const val = opts.value || "PREVIEW-123";
-      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect width="200" height="80" fill="#ffffff"/><path d="M10 10h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5zm10 0h15v60h-15zm20 0h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5z" fill="#000000"/><text x="100" y="75" font-family="monospace" font-size="10" text-anchor="middle">${val}</text></svg>`;
+      const fmt = opts.format || "CODE128";
+      const mockSvg = generateMockBarcodeSvg(val, fmt, 200, 80);
       return {
         success: true,
         data: {
           success: true,
           barcodeValue: val,
-          format: opts.format || "CODE128",
+          format: fmt,
           dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
-          svgString: mockSvg
+          svg: mockSvg,
+          svgString: mockSvg,
+          previewSvg: mockSvg,
+          pngDataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`
         },
         timestamp
       };
@@ -130,25 +307,31 @@ async function simulateWebIPCResponse(channel, payload) {
     case "barcode:export" /* BARCODE_EXPORT */: {
       const opts = payload || {};
       const val = opts.value || "EXPORT-123";
-      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect width="200" height="80" fill="#ffffff"/><path d="M10 10h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5zm10 0h15v60h-15zm20 0h5v60h-5zm10 0h10v60h-10zm15 0h5v60h-5z" fill="#000000"/><text x="100" y="75" font-family="monospace" font-size="10" text-anchor="middle">${val}</text></svg>`;
+      const fmt = opts.format || "CODE128";
+      const mockSvg = generateMockBarcodeSvg(val, fmt, 200, 80);
       return {
         success: true,
         data: {
           success: true,
           filePath: `/downloads/${val}.svg`,
-          dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`
+          dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
+          svgContent: mockSvg
         },
         timestamp
       };
     }
     case "print:preview" /* PRINT_PREVIEW */: {
       const opts = payload || {};
-      const mockSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect width="200" height="100" fill="#ffffff" stroke="#000"/><text x="10" y="30" font-size="12">PRINT PREVIEW</text></svg>`;
+      const val = opts.barcodeValue || "PRINT-PREVIEW-123";
+      const fmt = opts.barcodeType || opts.format || "CODE128";
+      const mockSvg = generateMockBarcodeSvg(val, fmt, 200, 100);
       return {
         success: true,
         data: {
           success: true,
           previewUrl: `data:image/svg+xml;utf8,${encodeURIComponent(mockSvg)}`,
+          previewSvg: mockSvg,
+          svg: mockSvg,
           printerName: opts.printerName || "Default Printer"
         },
         timestamp
@@ -379,6 +562,144 @@ async function simulateWebIPCResponse(channel, payload) {
         ],
         timestamp
       };
+    // Label Template IPC Handlers for Web Simulation Fallback
+    case "ipc:template:list" /* TEMPLATE_LIST */: {
+      const sanitized = webTemplates.map((t) => ({
+        ...t,
+        elements: (t.elements || []).map((el) => ({
+          ...el,
+          isLocked: t.isSystem ? true : false
+        }))
+      }));
+      return { success: true, data: sanitized, timestamp };
+    }
+    case "ipc:template:get" /* TEMPLATE_GET */: {
+      const found = webTemplates.find((t) => t.id === payload);
+      if (!found) {
+        return { success: false, error: { code: "NOT_FOUND", message: "Template not found" }, timestamp };
+      }
+      const sanitized = {
+        ...found,
+        elements: (found.elements || []).map((el) => ({
+          ...el,
+          isLocked: found.isSystem ? true : false
+        }))
+      };
+      return { success: true, data: sanitized, timestamp };
+    }
+    case "ipc:template:create" /* TEMPLATE_CREATE */: {
+      const body = payload || {};
+      const tplData = body.template || {};
+      const newTpl = {
+        id: "web_tpl_" + Date.now(),
+        name: tplData.name || "New Template",
+        description: tplData.description || "",
+        category: tplData.category || "CUSTOM",
+        widthMm: tplData.widthMm || 50,
+        heightMm: tplData.heightMm || 25,
+        marginTopMm: tplData.marginTopMm || 0,
+        marginBottomMm: tplData.marginBottomMm || 0,
+        marginLeftMm: tplData.marginLeftMm || 0,
+        marginRightMm: tplData.marginRightMm || 0,
+        paddingMm: tplData.paddingMm || 0,
+        gapMm: tplData.gapMm || 0,
+        orientation: tplData.orientation || "PORTRAIT",
+        dpi: tplData.dpi || 203,
+        isSystem: false,
+        isDefault: Boolean(tplData.isDefault),
+        isActive: true,
+        elements: (body.elements || []).map((el) => ({ ...el, isLocked: false })),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      webTemplates.push(newTpl);
+      return { success: true, data: newTpl, timestamp };
+    }
+    case "ipc:template:update" /* TEMPLATE_UPDATE */: {
+      const body = payload || {};
+      const idx = webTemplates.findIndex((t) => t.id === body.id);
+      if (idx === -1) {
+        return { success: false, error: { code: "NOT_FOUND", message: "Template not found" }, timestamp };
+      }
+      if (webTemplates[idx].isSystem) {
+        return { success: false, error: { code: "READ_ONLY", message: "System templates cannot be edited" }, timestamp };
+      }
+      const updatedElements = body.elements ? body.elements.map((el) => ({ ...el, isLocked: false })) : webTemplates[idx].elements;
+      const updated = {
+        ...webTemplates[idx],
+        ...body.template,
+        elements: updatedElements,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      webTemplates[idx] = updated;
+      return { success: true, data: updated, timestamp };
+    }
+    case "ipc:template:delete" /* TEMPLATE_DELETE */: {
+      const idx = webTemplates.findIndex((t) => t.id === payload);
+      if (idx !== -1 && !webTemplates[idx].isSystem) {
+        webTemplates.splice(idx, 1);
+        return { success: true, data: true, timestamp };
+      }
+      return { success: false, error: { code: "DELETE_FAILED", message: "Cannot delete template" }, timestamp };
+    }
+    case "ipc:template:duplicate" /* TEMPLATE_DUPLICATE */: {
+      const p = payload || {};
+      const src = webTemplates.find((t) => t.id === p.id);
+      if (!src) {
+        return { success: false, error: { code: "NOT_FOUND", message: "Source template not found" }, timestamp };
+      }
+      const dupId = "web_tpl_" + Date.now();
+      const dup = {
+        ...src,
+        id: dupId,
+        name: p.newName || `${src.name} (Copy)`,
+        isSystem: false,
+        isDefault: false,
+        elements: (src.elements || []).map((el, idx) => ({
+          ...el,
+          id: "el_" + Math.random().toString(36).substring(2, 9) + "_" + idx,
+          templateId: dupId,
+          isLocked: false
+        })),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      webTemplates.push(dup);
+      return { success: true, data: dup, timestamp };
+    }
+    case "ipc:template:export" /* TEMPLATE_EXPORT */: {
+      const src = webTemplates.find((t) => t.id === payload);
+      if (!src) {
+        return { success: false, error: { code: "NOT_FOUND", message: "Template not found" }, timestamp };
+      }
+      const jsonStr = JSON.stringify({ version: "1.0.0", exportedAt: (/* @__PURE__ */ new Date()).toISOString(), template: src, elements: src.elements || [] }, null, 2);
+      return { success: true, data: jsonStr, timestamp };
+    }
+    case "ipc:template:import" /* TEMPLATE_IMPORT */: {
+      try {
+        const pkg = JSON.parse(payload);
+        const dupId = "web_tpl_" + Date.now();
+        const imported = {
+          ...pkg.template,
+          id: dupId,
+          name: `${pkg.template?.name || "Imported"} (Imported)`,
+          isSystem: false,
+          isDefault: false,
+          elements: (pkg.elements || []).map((el, idx) => ({
+            ...el,
+            id: "el_" + Math.random().toString(36).substring(2, 9) + "_" + idx,
+            templateId: dupId,
+            isLocked: false
+          })),
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        webTemplates.push(imported);
+        return { success: true, data: imported, timestamp };
+      } catch (err) {
+        return { success: false, error: { code: "IMPORT_FAILED", message: err.message }, timestamp };
+      }
+    }
     default:
       return {
         success: true,

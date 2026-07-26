@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Print Label - MZ-00000001</title>
+  <style>
+    @page {
+      size: 100mm 50mm landscape;
+      margin: 0;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100mm !important;
+      height: 50mm !important;
+      overflow: hidden !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #mz-printable-document-root {
+      width: 100mm;
+      height: 50mm;
+      padding: 2mm 2mm 2mm 2mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-sizing: border-box;
+      background: #ffffff;
+      overflow: hidden;
+      position: relative;
+    }
+    .label-header {
+      width: 100%;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #1e293b;
+      font-size: 9.5pt;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 2px;
+    }
+    .label-barcode-container {
+      flex: 1 1 0%;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 2px 0;
+      overflow: hidden;
+    }
+    .label-barcode-container svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      display: block !important;
+    }
+    .label-barcode-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .label-footer {
+      width: 100%;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 7.5pt;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-left: 2px;
+      padding-right: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="mz-printable-document-root">
+    <div class="label-header">High-Pressure Hydraulic Valve</div>
+    <div class="label-barcode-container">
+      <img src="data:image/png;base64,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" alt="Barcode Graphic" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" />
+    </div>
+    <div class="label-footer">
+      <span>Code128</span>
+      <span>1 COPIES</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -96,6 +96,7 @@ export const Button: React.FC<{
   disabled?: boolean;
   className?: string;
   type?: 'button' | 'submit';
+  title?: string;
 }> = ({
   children,
   onClick,
@@ -105,6 +106,7 @@ export const Button: React.FC<{
   disabled = false,
   className = '',
   type = 'button',
+  title,
 }) => {
   const base = 'inline-flex items-center justify-center font-semibold rounded-lg transition-all focus:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -128,6 +130,7 @@ export const Button: React.FC<{
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
     >
       {Icon && <Icon className="h-4 w-4 shrink-0" />}

@@ -27,6 +27,7 @@ export function runDevelopmentSeeds(): void {
     if (!existingAdmin) {
       QueryBuilder.insert('users', {
         username: 'admin',
+        // TODO: Restore argon2 before production release.
         password_hash: '$argon2id$v=19$m=65536,t=3,p=4$mz_enterprise_admin_hash_stub',
         full_name: 'Enterprise Admin',
         role_id: adminRole.id,
@@ -40,20 +41,22 @@ export function runDevelopmentSeeds(): void {
   // 3. Default Label Templates Seed
   const templates = [
     {
+      id: 'dev_tpl_shipping_100x50',
       name: 'Standard Shipping 100x50mm',
       width_mm: 100,
       height_mm: 50,
       dpi: 203,
       is_default: 1,
-      layout_json: JSON.stringify({ barcodeType: 'CODE128', showText: true }),
+      category: 'SHIPPING',
     },
     {
+      id: 'dev_tpl_asset_50x25',
       name: 'Asset Tag QR 50x25mm',
       width_mm: 50,
       height_mm: 25,
       dpi: 203,
       is_default: 0,
-      layout_json: JSON.stringify({ barcodeType: 'QR', showText: true }),
+      category: 'ASSET',
     },
   ];
 

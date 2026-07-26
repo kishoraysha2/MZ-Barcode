@@ -14,9 +14,22 @@ export const SystemSettingsSchema = z.object({
   }),
   printing: z.object({
     defaultPrinter: z.string(),
+    printMode: z.enum(['DIALOG', 'SILENT']).optional().default('DIALOG'),
+    silentPrinting: z.boolean().optional().default(false),
+    rememberLastPrinter: z.boolean().optional().default(true),
     paperWidthMm: z.number().positive(),
     paperHeightMm: z.number().positive(),
     dpi: z.number().positive(),
+    copies: z.number().optional().default(1),
+    orientation: z.enum(['PORTRAIT', 'LANDSCAPE']).optional().default('PORTRAIT'),
+    paperSize: z.string().optional().default('CUSTOM'),
+    margins: z.object({
+      top: z.number(),
+      right: z.number(),
+      bottom: z.number(),
+      left: z.number(),
+    }).optional().default({ top: 2, right: 2, bottom: 2, left: 2 }),
+    printBackground: z.boolean().optional().default(true),
   }),
   security: z.object({
     sessionTimeoutMinutes: z.number().min(1).max(1440),

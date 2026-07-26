@@ -42,16 +42,7 @@ export interface BarcodeRecord {
   status: 'active' | 'archived';
 }
 
-export interface LabelTemplate {
-  id: number;
-  name: string;
-  widthMm: number;
-  heightMm: number;
-  dpi: number;
-  isDefault: boolean;
-  elementsCount: number;
-  updatedAt: string;
-}
+export type { LabelTemplate, LabelTemplateDTO, LabelElement, LabelElementDTO, TemplateCategory, Orientation } from './shared/types/template';
 
 export interface AuditLogItem {
   id: number;

@@ -1,30 +1,50 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { TemplateManagerPage } from './TemplateManagerPage';
 import { LabelDesignerView } from '../../views/LabelDesignerView';
-import { LabelTemplate } from '../../types';
-
-const DEFAULT_TEMPLATES: LabelTemplate[] = [
-  {
-    id: 1,
-    name: 'Standard Industrial Label (50mm x 25mm)',
-    widthMm: 50,
-    heightMm: 25,
-    dpi: 203,
-    isDefault: true,
-    elementsCount: 5,
-    updatedAt: new Date().toISOString().slice(0, 10),
-  },
-  {
-    id: 2,
-    name: 'Large Shipping Pallet Tag (100mm x 150mm)',
-    widthMm: 100,
-    heightMm: 150,
-    dpi: 300,
-    isDefault: false,
-    elementsCount: 8,
-    updatedAt: new Date().toISOString().slice(0, 10),
-  },
-];
+import { LabelTemplate } from '../../shared/types';
+import { ArrowLeft } from 'lucide-react';
 
 export const DesignerPage: React.FC = () => {
-  return <LabelDesignerView templates={DEFAULT_TEMPLATES} />;
+  const [activeTemplate, setActiveTemplate] = useState<LabelTemplate | null>(null);
+  const [viewMode, setViewMode] = useState<'manager' | 'designer'>('manager');
+
+  const handleOpenDesigner = (template: LabelTemplate) => {
+    setActiveTemplate(template);
+    setViewMode('designer');
+  };
+
+  const handleBackToManager = () => {
+    setViewMode('manager');
+  };
+
+  const handleTemplateUpdate = (updatedTemplate: LabelTemplate) => {
+    setActiveTemplate(updatedTemplate);
+  };
+
+  // Prevent array recreation on every render by memoizing against template ID
+  const templatesList = useMemo(
+    () => (activeTemplate ? [activeTemplate] : []),
+    [activeTemplate?.id]
+  );
+
+  if (viewMode === 'designer' && activeTemplate) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={handleBackToManager}
+          className="px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl hover:bg-amber-500/20 transition flex items-center gap-1.5"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Template Manager
+        </button>
+        <LabelDesignerView
+          templates={templatesList}
+          onTemplateUpdate={handleTemplateUpdate}
+        />
+      </div>
+    );
+  }
+
+  return <TemplateManagerPage onOpenDesigner={handleOpenDesigner} />;
 };
+
+

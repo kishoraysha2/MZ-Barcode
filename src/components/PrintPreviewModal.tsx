@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Printer,
@@ -9,6 +9,7 @@ import {
   Sliders,
   Check,
   X,
+  AlertTriangle,
   FileText,
   Copy,
   Layout,
@@ -26,6 +27,7 @@ import {
   PaperConfig,
   MarginSettings,
 } from '../utils/PrintLayoutEngine';
+import { normalizeSvg } from '../utils/SVGNormalizer';
 
 interface PrintPreviewModalProps {
   isOpen: boolean;
@@ -68,15 +70,17 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [customMargins, setCustomMargins] = useState<MarginSettings>({ topMm: 2, rightMm: 2, bottomMm: 2, leftMm: 2 });
   const [dpi, setDpi] = useState<number>(initialDpi);
   const [copies, setCopies] = useState<number>(initialCopies);
+  const [printOutputMode, setPrintOutputMode] = useState<'DIALOG' | 'SILENT'>('DIALOG');
 
   // Zoom & Viewport Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100); // Percentage 25% - 400%
-  const [fitMode, setFitMode] = useState<boolean>(true);
+  const [previewMode, setPreviewMode] = useState<'fit' | 'actual' | 'fitWidth' | 'fitHeight'>('fit');
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Status & Feedback
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState<string | null>(null);
+  const [printErrorMsg, setPrintErrorMsg] = useState<string | null>(null);
 
   // Ensure printable root element exists in DOM
   useEffect(() => {
@@ -154,36 +158,100 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   // Zoom controls
   const handleZoomIn = () => {
-    setFitMode(false);
     setZoomLevel((prev) => Math.min(400, prev + 25));
   };
 
   const handleZoomOut = () => {
-    setFitMode(false);
     setZoomLevel((prev) => Math.max(25, prev - 25));
   };
 
-  const handleResetZoom = () => {
-    setFitMode(false);
-    setZoomLevel(100);
-  };
-
-  const handleFitToPage = () => {
+  const handleRecalculateScale = () => {
     if (!previewContainerRef.current) return;
     const containerW = previewContainerRef.current.clientWidth || 600;
     const containerH = previewContainerRef.current.clientHeight || 450;
     const pagePxW = PrintLayoutEngine.mmToPx(pageBounds.widthMm, 96);
     const pagePxH = PrintLayoutEngine.mmToPx(pageBounds.heightMm, 96);
 
-    const fitScale = PrintLayoutEngine.calculateFitScale(pagePxW, pagePxH, containerW, containerH, 32);
-    setZoomLevel(Math.round(fitScale * 100));
-    setFitMode(true);
+    if (previewMode === 'fit') {
+      const fitScale = PrintLayoutEngine.calculateFitScale(pagePxW, pagePxH, containerW, containerH, 20, 1.0);
+      setZoomLevel(Math.round(fitScale * 100));
+    } else if (previewMode === 'actual') {
+      setZoomLevel(100);
+    } else if (previewMode === 'fitWidth') {
+      const availW = Math.max(100, containerW - 32);
+      const scale = availW / pagePxW;
+      setZoomLevel(Math.max(25, Math.round(scale * 100)));
+    } else if (previewMode === 'fitHeight') {
+      const availH = Math.max(100, containerH - 32);
+      const scale = availH / pagePxH;
+      setZoomLevel(Math.max(25, Math.round(scale * 100)));
+    }
   };
+
+  // Auto fit/scale on modal open, dimension changes, or mode changes
+  useEffect(() => {
+    if (!isOpen) return;
+    handleRecalculateScale();
+  }, [isOpen, pageBounds.widthMm, pageBounds.heightMm, orientation, previewMode]);
+
+  // Observe preview container size changes
+  useEffect(() => {
+    if (!previewContainerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      handleRecalculateScale();
+    });
+    observer.observe(previewContainerRef.current);
+    return () => observer.disconnect();
+  }, [previewMode, pageBounds.widthMm, pageBounds.heightMm]);
+
+  // Ensure SVG root tag has preserveAspectRatio="xMidYMid meet" and viewBox for vector scaling
+  const formattedPreviewSvg = useMemo(() => {
+    return normalizeSvg(previewSvg);
+  }, [previewSvg]);
+
+  // Console Runtime Debug Logging
+  useEffect(() => {
+    if (!isOpen || !previewContainerRef.current) return;
+    const elem = previewContainerRef.current;
+    const containerW = elem.clientWidth || 600;
+    const containerH = elem.clientHeight || 450;
+    const physWmm = pageBounds.widthMm;
+    const physHmm = pageBounds.heightMm;
+    const pagePxW = PrintLayoutEngine.mmToPx(physWmm, 96);
+    const pagePxH = PrintLayoutEngine.mmToPx(physHmm, 96);
+
+    const fitScale = (zoomLevel / 100).toFixed(4);
+    const renderedW = Math.round(pagePxW * (zoomLevel / 100));
+    const renderedH = Math.round(pagePxH * (zoomLevel / 100));
+
+    const computedStyle = window.getComputedStyle(elem);
+    const transform = computedStyle ? computedStyle.transform : 'none';
+
+    console.log('[RUNTIME DEBUG - PRINT PREVIEW MODAL VIEWPORT]', {
+      containerWidthPx: containerW,
+      containerHeightPx: containerH,
+      physicalWidthMm: physWmm,
+      physicalHeightMm: physHmm,
+      convertedWidthPx: Math.round(pagePxW),
+      convertedHeightPx: Math.round(pagePxH),
+      computedFitScale: fitScale,
+      finalRenderedSvgWidth: `${renderedW}px (100%)`,
+      finalRenderedSvgHeight: `${renderedH}px (100%)`,
+      actualDomWidth: elem.clientWidth,
+      actualDomHeight: elem.clientHeight,
+      cssTransformsApplied: transform,
+      scaleApplied: `scale(${fitScale})`,
+      zoomValue: `${zoomLevel}% (Mode: ${previewMode})`,
+      preserveAspectRatioOverridden: formattedPreviewSvg.includes('preserveAspectRatio="xMidYMid meet"'),
+    });
+  }, [isOpen, pageBounds.widthMm, pageBounds.heightMm, zoomLevel, previewMode, formattedPreviewSvg]);
 
   // Dispatch Print Job
   const handleExecutePrint = async () => {
     try {
       setIsPrinting(true);
+      setPrintSuccessMsg(null);
+      setPrintErrorMsg(null);
 
       const paperConfig: PaperConfig = {
         preset: paperPreset,
@@ -203,6 +271,9 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         barcodeType,
         title,
         copies,
+        printMode: printOutputMode,
+        svgContent: formattedPreviewSvg || previewSvg,
+        pngDataUrl: previewPng,
         labelConfig: {
           width: pageBounds.widthMm,
           height: pageBounds.heightMm,
@@ -224,22 +295,28 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       styleEl.innerHTML = PrintLayoutEngine.generatePrintCss(paperConfig);
       document.head.appendChild(styleEl);
 
-      if (res.success && res.data) {
-        setPrintSuccessMsg(`Dispatched Print Job #${res.data.jobId} to ${selectedPrinter} (${copies} copies)!`);
+      setIsPrinting(false);
+
+      if (res.data?.status === 'PRINTED' || (res.success && res.data?.status !== 'CANCELLED' && res.data?.status !== 'FAILED')) {
+        setPrintSuccessMsg(`Print Sent Successfully to ${selectedPrinter || 'Default Printer'} (${copies} copies)`);
+      } else if (res.data?.status === 'CANCELLED') {
+        setPrintErrorMsg('Print job was cancelled by user');
       } else {
-        setPrintSuccessMsg(`Print Spooler Ready for ${selectedPrinter} (${copies} copies).`);
+        const errText = res.data?.error || res.error?.message || 'Windows print spooler rejected the job';
+        setPrintErrorMsg(`Print Failed: ${errText}`);
       }
 
       setTimeout(() => {
-        setIsPrinting(false);
         setPrintSuccessMsg(null);
+        setPrintErrorMsg(null);
         // Clean up injected style tag
         const el = document.getElementById('mz-print-preview-stylesheet');
         if (el) el.remove();
-      }, 4000);
+      }, 5000);
     } catch (err) {
       console.error('Failed executing print job:', err);
       setIsPrinting(false);
+      setPrintErrorMsg('Print dispatch exception occurred');
     }
   };
 
@@ -264,10 +341,10 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             {title}
           </div>
           <div className="flex-1 w-full flex items-center justify-center my-1 overflow-hidden">
-            {previewSvg ? (
+            {formattedPreviewSvg ? (
               <div
-                dangerouslySetInnerHTML={{ __html: previewSvg }}
-                className="w-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full"
+                dangerouslySetInnerHTML={{ __html: formattedPreviewSvg }}
+                className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:block opacity-100"
               />
             ) : previewPng ? (
               <img src={previewPng} alt="Barcode Graphic" className="max-w-full max-h-full object-contain" />
@@ -313,6 +390,22 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
                 <span>Driver: <strong className="font-mono text-amber-500">{driverType}</strong></span>
                 <span>Res: <strong className="font-mono text-amber-500">{dpi} DPI</strong></span>
               </div>
+            </div>
+
+            {/* Print Output Mode Selector */}
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Sliders className="h-3.5 w-3.5 text-amber-500" />
+                Print Output Mode
+              </label>
+              <select
+                value={printOutputMode}
+                onChange={(e) => setPrintOutputMode(e.target.value as 'DIALOG' | 'SILENT')}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100"
+              >
+                <option value="DIALOG">Windows Print Dialog (Interactive)</option>
+                <option value="SILENT">Silent Direct Print (Background)</option>
+              </select>
             </div>
 
             {/* Paper Size Selector */}
@@ -471,40 +564,59 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           {/* RIGHT COLUMN: Interactive Live Page Canvas & Zoom Viewport (Stable flex container occupying remaining space) */}
           <div className="flex-1 min-w-0 md:min-w-[400px] flex flex-col min-h-[420px] bg-slate-900 rounded-xl p-4 border border-slate-800 overflow-hidden relative">
             {/* Zoom Toolbar */}
-            <div className="flex items-center justify-between bg-slate-950/80 backdrop-blur-xs p-2 rounded-lg border border-slate-800 mb-3 z-10 text-xs">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={handleZoomOut}
-                  title="Zoom Out"
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-300 transition"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <span className="font-mono font-bold text-amber-400 px-2 text-[11px] min-w-[50px] text-center">
-                  {zoomLevel}%
-                </span>
-                <button
-                  onClick={handleZoomIn}
-                  title="Zoom In"
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-300 transition"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleResetZoom}
-                  title="100% Scale"
-                  className="px-2 py-1 rounded hover:bg-slate-800 text-[10px] font-bold text-slate-400 transition"
-                >
-                  100%
-                </button>
-                <button
-                  onClick={handleFitToPage}
-                  title="Fit to Viewport"
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-300 transition flex items-center gap-1"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                  <span className="text-[10px] font-semibold">Fit</span>
-                </button>
+            <div className="flex items-center justify-between bg-slate-950/90 backdrop-blur-xs p-2 rounded-lg border border-slate-800 mb-3 z-10 text-xs flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">Mode:</span>
+                  <select
+                    value={previewMode}
+                    onChange={(e) => setPreviewMode(e.target.value as any)}
+                    className="bg-slate-900 text-slate-200 border border-slate-700/80 rounded px-2 py-1 text-xs font-medium focus:border-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="fit">Fit to View</option>
+                    <option value="actual">Actual Size (100%)</option>
+                    <option value="fitWidth">Fit Width</option>
+                    <option value="fitHeight">Fit Height</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1 border-l border-slate-800 pl-2">
+                  <button
+                    onClick={handleZoomOut}
+                    title="Zoom Out"
+                    className="p-1 rounded hover:bg-slate-800 text-slate-300 transition"
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </button>
+
+                  <select
+                    value={[50, 75, 100, 125, 150, 200, 400].includes(zoomLevel) ? zoomLevel : ''}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val) setZoomLevel(val);
+                    }}
+                    className="bg-slate-900 text-amber-400 border border-slate-700/80 rounded px-1.5 py-1 text-xs font-mono font-bold focus:border-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    {!([50, 75, 100, 125, 150, 200, 400].includes(zoomLevel)) && (
+                      <option value="">{zoomLevel}%</option>
+                    )}
+                    <option value={50}>50%</option>
+                    <option value={75}>75%</option>
+                    <option value={100}>100%</option>
+                    <option value={125}>125%</option>
+                    <option value={150}>150%</option>
+                    <option value={200}>200%</option>
+                    <option value={400}>400%</option>
+                  </select>
+
+                  <button
+                    onClick={handleZoomIn}
+                    title="Zoom In"
+                    className="p-1 rounded hover:bg-slate-800 text-slate-300 transition"
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="text-[10px] font-mono text-slate-400 flex items-center gap-2">
@@ -518,68 +630,60 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               ref={previewContainerRef}
               className="flex-1 min-h-[280px] w-full flex items-center justify-center overflow-auto p-4 relative bg-slate-950/50 rounded-lg border border-dashed border-slate-800/80"
             >
-            {/* Physical Paper Boundary Simulation */}
-            <div
-              style={{
-                width: `${PrintLayoutEngine.mmToPx(pageBounds.widthMm, 96) * (zoomLevel / 100)}px`,
-                height: `${PrintLayoutEngine.mmToPx(pageBounds.heightMm, 96) * (zoomLevel / 100)}px`,
-                paddingTop: `${PrintLayoutEngine.mmToPx(activeMargins.topMm, 96) * (zoomLevel / 100)}px`,
-                paddingRight: `${PrintLayoutEngine.mmToPx(activeMargins.rightMm, 96) * (zoomLevel / 100)}px`,
-                paddingBottom: `${PrintLayoutEngine.mmToPx(activeMargins.bottomMm, 96) * (zoomLevel / 100)}px`,
-                paddingLeft: `${PrintLayoutEngine.mmToPx(activeMargins.leftMm, 96) * (zoomLevel / 100)}px`,
-                transition: fitMode ? 'none' : 'width 0.2s, height 0.2s',
-              }}
-              className="bg-white text-slate-900 shadow-2xl rounded-xs flex flex-col items-center justify-between border border-slate-300 relative overflow-hidden group"
-            >
-              {/* Margins Boundary Visualization Line */}
+              {/* Physical Paper Boundary Simulation */}
               <div
-                className="absolute inset-0 pointer-events-none border border-dashed border-rose-400/40 opacity-60"
                 style={{
-                  top: `${PrintLayoutEngine.mmToPx(activeMargins.topMm, 96) * (zoomLevel / 100)}px`,
-                  right: `${PrintLayoutEngine.mmToPx(activeMargins.rightMm, 96) * (zoomLevel / 100)}px`,
-                  bottom: `${PrintLayoutEngine.mmToPx(activeMargins.bottomMm, 96) * (zoomLevel / 100)}px`,
-                  left: `${PrintLayoutEngine.mmToPx(activeMargins.leftMm, 96) * (zoomLevel / 100)}px`,
+                  width: `${PrintLayoutEngine.mmToPx(pageBounds.widthMm, 96) * (zoomLevel / 100)}px`,
+                  height: `${PrintLayoutEngine.mmToPx(pageBounds.heightMm, 96) * (zoomLevel / 100)}px`,
+                  transition: 'width 0.15s ease-out, height 0.15s ease-out',
                 }}
-              />
-
-              {/* Header Label Text */}
-              <div className="text-center font-sans font-bold tracking-tight text-slate-800 truncate w-full px-1" style={{ fontSize: `${Math.max(8, 10 * (zoomLevel / 100))}px` }}>
-                {title}
-              </div>
-
-              {/* Rendered Barcode Graphic Component */}
-              <div className="flex-1 w-full flex items-center justify-center my-1 overflow-hidden">
-                {previewSvg ? (
-                  <div
-                    dangerouslySetInnerHTML={{ __html: previewSvg }}
-                    className="w-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full"
-                  />
-                ) : previewPng ? (
-                  <img src={previewPng} alt="Barcode Graphic" className="max-w-full max-h-full object-contain" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-slate-400 text-xs py-4">
-                    <Barcode className="h-10 w-10 mb-1 opacity-50" />
-                    <span>Barcode Preview Rendering...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer Specs Indicator */}
-              <div
-                className="w-full border-t border-slate-200 pt-0.5 flex items-center justify-between font-mono text-slate-500 uppercase tracking-wider px-1"
-                style={{ fontSize: `${Math.max(6, 8 * (zoomLevel / 100))}px` }}
+                className="bg-white text-slate-900 shadow-2xl rounded-xs flex flex-col items-center justify-between border border-slate-300 relative overflow-hidden group"
               >
-                <span>{barcodeType}</span>
-                <span>{copies} COPIES</span>
+                {/* Margins Boundary Visualization Line */}
+                <div
+                  className="absolute inset-0 pointer-events-none border border-dashed border-rose-400/40 opacity-60 z-20"
+                  style={{
+                    top: `${PrintLayoutEngine.mmToPx(activeMargins.topMm, 96) * (zoomLevel / 100)}px`,
+                    right: `${PrintLayoutEngine.mmToPx(activeMargins.rightMm, 96) * (zoomLevel / 100)}px`,
+                    bottom: `${PrintLayoutEngine.mmToPx(activeMargins.bottomMm, 96) * (zoomLevel / 100)}px`,
+                    left: `${PrintLayoutEngine.mmToPx(activeMargins.leftMm, 96) * (zoomLevel / 100)}px`,
+                  }}
+                />
+
+                {/* Single Source of Truth Preview Document Frame */}
+                <iframe
+                  srcDoc={PrintLayoutEngine.buildLabelHtml({
+                    labelConfig: {
+                      width: pageBounds.widthMm,
+                      height: pageBounds.heightMm,
+                      orientation,
+                      margins: activeMargins,
+                      copies,
+                    },
+                    barcodeValue,
+                    barcodeType,
+                    title,
+                    svgContent: formattedPreviewSvg || previewSvg,
+                    pngDataUrl: previewPng,
+                  })}
+                  className="w-full h-full border-0 pointer-events-none select-none bg-white z-10"
+                  title="Unified Label Preview"
+                />
               </div>
             </div>
-          </div>
 
-          {/* Success Banner */}
+          {/* Success / Error Banners */}
           {printSuccessMsg && (
             <div className="mt-3 p-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg text-xs flex items-center gap-2">
               <Check className="h-4 w-4 flex-shrink-0" />
               <span>{printSuccessMsg}</span>
+            </div>
+          )}
+
+          {printErrorMsg && (
+            <div className="mt-3 p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold rounded-lg text-xs flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>{printErrorMsg}</span>
             </div>
           )}
 

@@ -2,6 +2,9 @@
  * Shared Type Definitions for Main, Preload, Renderer
  */
 
+export * from './types/template';
+import { LabelTemplate, LabelTemplateDTO, LabelElementDTO } from './types/template';
+
 export type AppEdition = 'customer' | 'owner';
 export type UserRole = 'OWNER' | 'ADMIN' | 'USER' | 'OPERATOR' | 'VIEWER';
 
@@ -29,9 +32,17 @@ export interface SystemSettings {
   };
   printing: {
     defaultPrinter: string;
+    printMode: 'DIALOG' | 'SILENT';
+    silentPrinting: boolean;
+    rememberLastPrinter: boolean;
     paperWidthMm: number;
     paperHeightMm: number;
     dpi: number;
+    copies: number;
+    orientation: 'PORTRAIT' | 'LANDSCAPE';
+    paperSize: string;
+    margins: { top: number; right: number; bottom: number; left: number };
+    printBackground: boolean;
   };
   security: {
     sessionTimeoutMinutes: number;
@@ -135,7 +146,10 @@ export interface BarcodeGenerateOptions {
 export interface BarcodeGenerateResult {
   success: boolean;
   svg?: string;
+  svgString?: string;
+  previewSvg?: string;
   pngDataUrl?: string;
+  dataUrl?: string;
   type?: string;
   value?: string;
   error?: string;
@@ -180,6 +194,11 @@ export interface PrintJobOptions {
   barcodeType: string;
   title?: string;
   copies?: number;
+  silent?: boolean;
+  printMode?: 'DIALOG' | 'SILENT';
+  printBackground?: boolean;
+  svgContent?: string;
+  pngDataUrl?: string;
   labelConfig?: Partial<LabelConfig>;
 }
 
@@ -246,7 +265,7 @@ export interface ElectronAPI {
   previewBarcode: (options: BarcodeGenerateOptions) => Promise<IPCResponse<BarcodeGenerateResult>>;
   exportBarcode: (options: BarcodeGenerateOptions & { format?: 'svg' | 'png' }) => Promise<IPCResponse<{ success: boolean; dataUrl?: string; svgContent?: string; error?: string }>>;
   previewPrint: (options: PrintPreviewOptions) => Promise<IPCResponse<PrintPreviewResult>>;
-  createPrintJob: (options: PrintJobOptions) => Promise<IPCResponse<{ jobId: number; status: string; printerName: string; copies: number }>>;
+  createPrintJob: (options: PrintJobOptions) => Promise<IPCResponse<{ jobId: number; status: string; printerName: string; copies: number; error?: string }>>;
   createBarcode: (barcode: {
     id?: number;
     barcode_value: string;
@@ -277,6 +296,16 @@ export interface ElectronAPI {
   updateUserStatus: (params: { userId: number; isActive: boolean }) => Promise<IPCResponse<{ updated: boolean }>>;
   getRoles: () => Promise<IPCResponse<{ id: number; name: string; description: string; isActive: boolean }[]>>;
   getPermissions: (roleId: number) => Promise<IPCResponse<string[]>>;
+
+  // Label Template IPC (Sprint 6.2.1)
+  getLabelTemplates: () => Promise<IPCResponse<LabelTemplate[]>>;
+  getLabelTemplate: (id: string) => Promise<IPCResponse<LabelTemplate>>;
+  createLabelTemplate: (dto: { template: LabelTemplateDTO; elements?: LabelElementDTO[] }) => Promise<IPCResponse<LabelTemplate>>;
+  updateLabelTemplate: (dto: { id: string; template: Partial<LabelTemplateDTO>; elements?: LabelElementDTO[] }) => Promise<IPCResponse<LabelTemplate>>;
+  deleteLabelTemplate: (id: string) => Promise<IPCResponse<boolean>>;
+  duplicateLabelTemplate: (dto: { id: string; newName?: string }) => Promise<IPCResponse<LabelTemplate>>;
+  exportLabelTemplate: (id: string) => Promise<IPCResponse<string>>;
+  importLabelTemplate: (jsonContent: string) => Promise<IPCResponse<LabelTemplate>>;
 }
 
 declare global {
