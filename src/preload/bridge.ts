@@ -1,9 +1,58 @@
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { ElectronAPI, IPCResponse } from '../shared/types';
+import { MasterModuleName } from '../shared/masterTypes';
 
 // In-memory array for web simulation fallback when in browser preview
 const webBarcodes: any[] = [];
 let barcodeAutoId = Date.now();
+
+// Shared product store for web preview IPC simulation
+let webLastScannedBarcode = '';
+let webLastScanTimestamp = 0;
+
+const webMockProducts: Record<string, any> = {};
+
+const webMockCategories: any[] = [
+  { id: 1, name: 'GENERAL', description: 'General uncategorized items', sortOrder: 1, isActive: true, createdAt: new Date().toISOString() },
+  { id: 2, name: 'HARDWARE', description: 'Physical equipment and hardware devices', sortOrder: 2, isActive: true, createdAt: new Date().toISOString() },
+  { id: 3, name: 'SUPPLIES', description: 'Consumables, packaging, and office supplies', sortOrder: 3, isActive: true, createdAt: new Date().toISOString() },
+  { id: 4, name: 'ASSET', description: 'Fixed company assets and serialized tools', sortOrder: 4, isActive: true, createdAt: new Date().toISOString() },
+  { id: 5, name: 'ELECTRONICS', description: 'Electronic parts and gadgets', sortOrder: 5, isActive: true, createdAt: new Date().toISOString() },
+  { id: 6, name: 'ACCESSORIES', description: 'Peripherals and auxiliary accessories', sortOrder: 6, isActive: true, createdAt: new Date().toISOString() },
+];
+
+const webMockMasterData: Record<string, any[]> = {
+  categories: [
+    { id: 'cat-uuid-001', name: 'General', code: 'CAT-GEN', description: 'General uncategorized items', sortOrder: 1, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'cat-uuid-002', name: 'Hardware', code: 'CAT-HWD', description: 'Physical equipment and hardware tools', sortOrder: 2, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'cat-uuid-003', name: 'Supplies', code: 'CAT-SUP', description: 'Consumables, packaging, and office supplies', sortOrder: 3, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'cat-uuid-004', name: 'Electronics', code: 'CAT-ELE', description: 'Electronic parts and components', sortOrder: 4, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'cat-uuid-005', name: 'Accessories', code: 'CAT-ACC', description: 'Auxiliary parts and peripheral accessories', sortOrder: 5, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+  ],
+  units: [
+    { id: 'uom-uuid-001', name: 'Pieces', code: 'PCS', description: 'Individual count units', sortOrder: 1, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'uom-uuid-002', name: 'Boxes', code: 'BOX', description: 'Box container packs', sortOrder: 2, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'uom-uuid-003', name: 'Kilograms', code: 'KG', description: 'Weight measurement in kilograms', sortOrder: 3, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'uom-uuid-004', name: 'Meters', code: 'MTR', description: 'Length measurement in meters', sortOrder: 4, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'uom-uuid-005', name: 'Sets', code: 'SET', description: 'Assembled set packs', sortOrder: 5, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+  ],
+  brands: [
+    { id: 'brd-uuid-001', name: 'MZ Enterprise', code: 'MZ-ENT', description: 'Primary house brand products', sortOrder: 1, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'brd-uuid-002', name: 'LogiTech Pro', code: 'LOGI', description: 'Hardware and scanner equipment', sortOrder: 2, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'brd-uuid-003', name: 'Zebra Tech', code: 'ZEBRA', description: 'Thermal printers and barcode tech', sortOrder: 3, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'brd-uuid-004', name: 'Honeywell', code: 'HNW', description: 'Industrial scanner devices', sortOrder: 4, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+  ],
+  warehouses: [
+    { id: 'whs-uuid-001', name: 'Main Central Warehouse', code: 'WHS-MAIN', description: 'Primary distribution facility and hub', sortOrder: 1, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'whs-uuid-002', name: 'North Storage Annex', code: 'WHS-NTH', description: 'Secondary overflow regional storage', sortOrder: 2, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'whs-uuid-003', name: 'Retail Front Depot', code: 'WHS-RTL', description: 'Storefront quick pick inventory depot', sortOrder: 3, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+  ],
+  suppliers: [
+    { id: 'sup-uuid-001', name: 'Apex Logistics & Supply', code: 'SUP-APEX', description: 'Primary raw materials supplier', sortOrder: 1, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'sup-uuid-002', name: 'Global Barcode Systems', code: 'SUP-GBS', description: 'Hardware and printer media partner', sortOrder: 2, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+    { id: 'sup-uuid-003', name: 'Omni Components Ltd', code: 'SUP-OMNI', description: 'Electronics and component distributor', sortOrder: 3, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'SYSTEM', updatedBy: 'SYSTEM' },
+  ],
+};
 
 const webTemplates: any[] = [
   {
@@ -180,21 +229,140 @@ export const electronBridge: ElectronAPI = {
   duplicateLabelTemplate: async (dto) => invokeIPC(IPC_CHANNELS.TEMPLATE_DUPLICATE, dto),
   exportLabelTemplate: async (id) => invokeIPC(IPC_CHANNELS.TEMPLATE_EXPORT, id),
   importLabelTemplate: async (jsonContent) => invokeIPC(IPC_CHANNELS.TEMPLATE_IMPORT, jsonContent),
+
+  // Barcode Scanner IPC (Sprint 7.0.0)
+  processScan: async (options) => invokeIPC(IPC_CHANNELS.SCANNER_PROCESS, options),
+  getScanHistory: async (limit) => invokeIPC(IPC_CHANNELS.SCANNER_GET_HISTORY, limit),
+  clearScanHistory: async () => invokeIPC(IPC_CHANNELS.SCANNER_CLEAR_HISTORY),
+  getScannerSettings: async () => invokeIPC(IPC_CHANNELS.SCANNER_GET_SETTINGS),
+  saveScannerSettings: async (settings) => invokeIPC(IPC_CHANNELS.SCANNER_SAVE_SETTINGS, settings),
+  createScannerProduct: async (product) => invokeIPC(IPC_CHANNELS.SCANNER_CREATE_PRODUCT, product),
+
+  // Product Management Module IPC
+  getAllProducts: async () => invokeIPC(IPC_CHANNELS.PRODUCT_GET_ALL),
+  createProduct: async (product) => invokeIPC(IPC_CHANNELS.PRODUCT_CREATE, product),
+  updateProduct: async (id, product) => invokeIPC(IPC_CHANNELS.PRODUCT_UPDATE, { id, product }),
+  deleteProduct: async (id) => invokeIPC(IPC_CHANNELS.PRODUCT_DELETE, id),
+
+  // Category Management Module IPC
+  getCategories: async () => invokeIPC(IPC_CHANNELS.CATEGORY_GET_ALL),
+  createCategory: async (category) => invokeIPC(IPC_CHANNELS.CATEGORY_CREATE, category),
+  updateCategory: async (id, category) => invokeIPC(IPC_CHANNELS.CATEGORY_UPDATE, { id, category }),
+  deleteCategory: async (id) => invokeIPC(IPC_CHANNELS.CATEGORY_DELETE, id),
+
+  // Enterprise Master Data Framework IPC
+  masterGetAll: async (moduleName) => invokeIPC(IPC_CHANNELS.MASTER_GET_ALL, { moduleName }),
+  masterGetActive: async (moduleName) => invokeIPC(IPC_CHANNELS.MASTER_GET_ACTIVE, { moduleName }),
+  masterCreate: async (moduleName, payload) => invokeIPC(IPC_CHANNELS.MASTER_CREATE, { moduleName, ...payload }),
+  masterUpdate: async (moduleName, id, payload) => invokeIPC(IPC_CHANNELS.MASTER_UPDATE, { moduleName, id, payload }),
+  masterEnable: async (moduleName, id, context) => invokeIPC(IPC_CHANNELS.MASTER_ENABLE, { moduleName, id, ...context }),
+  masterDisable: async (moduleName, id, context) => invokeIPC(IPC_CHANNELS.MASTER_DISABLE, { moduleName, id, ...context }),
+  masterDelete: async (moduleName, id, context) => invokeIPC(IPC_CHANNELS.MASTER_DELETE, { moduleName, id, ...context }),
 };
+
+function extractModuleName(payload: unknown): MasterModuleName {
+  if (typeof payload === 'string') return payload as MasterModuleName;
+  if (payload && typeof payload === 'object') {
+    const p = payload as Record<string, any>;
+    if (typeof p.moduleName === 'string') return p.moduleName as MasterModuleName;
+    if (p.moduleName && typeof p.moduleName === 'object' && typeof p.moduleName.moduleName === 'string') {
+      return p.moduleName.moduleName as MasterModuleName;
+    }
+  }
+  return 'categories';
+}
 
 /**
  * Universal IPC invoker with web preview runtime fallback
  */
 async function invokeIPC<T>(channel: string, payload?: unknown): Promise<IPCResponse<T>> {
   console.log(`[TRACE 2.2] invokeIPC channel: ${channel}`);
-  if (typeof window !== 'undefined' && (window as unknown as { ipcRenderer?: { invoke: (c: string, p?: unknown) => Promise<IPCResponse<T>> } }).ipcRenderer) {
-    console.log(`[TRACE 2.3] Dispatching via Electron window.ipcRenderer.invoke(${channel})`);
-    const res = await (window as unknown as { ipcRenderer: { invoke: (c: string, p?: unknown) => Promise<IPCResponse<T>> } }).ipcRenderer.invoke(channel, payload);
-    console.log(`[TRACE 2.3.1] Electron window.ipcRenderer.invoke response for ${channel}:`, res);
-    return res;
+  
+  const api = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+
+  if (api && api !== electronBridge) {
+    const channelToMethodMap: Record<string, keyof ElectronAPI> = {
+      [IPC_CHANNELS.DATABASE_INIT]: 'databaseInit',
+      [IPC_CHANNELS.DATABASE_STATUS]: 'getDatabaseStatus',
+      [IPC_CHANNELS.DASHBOARD_GET_OVERVIEW]: 'getDashboardOverview',
+      [IPC_CHANNELS.DASHBOARD_GET_STATISTICS]: 'getDashboardStatistics',
+      [IPC_CHANNELS.DASHBOARD_GET_RECENT_BARCODES]: 'getRecentBarcodes',
+      [IPC_CHANNELS.SETTINGS_GET]: 'getSettings',
+      [IPC_CHANNELS.SETTINGS_SAVE]: 'saveSettings',
+      [IPC_CHANNELS.SETTINGS_RESET]: 'resetSettings',
+      [IPC_CHANNELS.AUDIT_LOGS_GET]: 'getAuditLogs',
+      [IPC_CHANNELS.BACKUP_CREATE]: 'createBackup',
+      [IPC_CHANNELS.BACKUP_LIST]: 'listBackups',
+      [IPC_CHANNELS.BACKUP_RESTORE]: 'restoreBackup',
+      [IPC_CHANNELS.LICENSE_GET_STATUS]: 'getLicenseStatus',
+      [IPC_CHANNELS.LICENSE_CHECK]: 'checkLicense',
+      [IPC_CHANNELS.LICENSE_ACTIVATE]: 'activateLicense',
+      [IPC_CHANNELS.PRINTER_GET_DEFAULT]: 'getDefaultPrinter',
+      [IPC_CHANNELS.PRINTER_LIST]: 'getPrinters',
+      [IPC_CHANNELS.PRINTER_STATUS]: 'getPrinterStatus',
+      [IPC_CHANNELS.PRINTER_GET_PROFILES]: 'getPrinterProfiles',
+      [IPC_CHANNELS.BARCODE_FORMATS]: 'getBarcodeFormats',
+      [IPC_CHANNELS.BARCODE_VALIDATE]: 'validateBarcode',
+      [IPC_CHANNELS.BARCODE_GET_ALL]: 'getAllBarcodes',
+      [IPC_CHANNELS.BARCODE_GENERATE]: 'generateBarcode',
+      [IPC_CHANNELS.BARCODE_PREVIEW]: 'previewBarcode',
+      [IPC_CHANNELS.BARCODE_EXPORT]: 'exportBarcode',
+      [IPC_CHANNELS.PRINT_PREVIEW]: 'previewPrint',
+      [IPC_CHANNELS.PRINT_CREATE_JOB]: 'createPrintJob',
+      [IPC_CHANNELS.BARCODE_CREATE]: 'createBarcode',
+      [IPC_CHANNELS.BARCODE_GET_NEXT_SEQUENCE]: 'getNextSequence',
+      [IPC_CHANNELS.SYSTEM_INFO]: 'getSystemInfo',
+      [IPC_CHANNELS.LOGS_WRITE]: 'logMessage',
+      [IPC_CHANNELS.AUTH_LOGIN]: 'login',
+      [IPC_CHANNELS.AUTH_LOGOUT]: 'logout',
+      [IPC_CHANNELS.AUTH_VALIDATE_SESSION]: 'validateSession',
+      [IPC_CHANNELS.AUTH_CHANGE_PASSWORD]: 'changePassword',
+      [IPC_CHANNELS.USER_LIST]: 'getUsers',
+      [IPC_CHANNELS.USER_CREATE]: 'createUser',
+      [IPC_CHANNELS.USER_UPDATE_STATUS]: 'updateUserStatus',
+      [IPC_CHANNELS.ROLE_LIST]: 'getRoles',
+      [IPC_CHANNELS.PERMISSIONS_GET]: 'getPermissions',
+      [IPC_CHANNELS.TEMPLATE_LIST]: 'getLabelTemplates',
+      [IPC_CHANNELS.TEMPLATE_GET]: 'getLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_CREATE]: 'createLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_UPDATE]: 'updateLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_DELETE]: 'deleteLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_DUPLICATE]: 'duplicateLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_EXPORT]: 'exportLabelTemplate',
+      [IPC_CHANNELS.TEMPLATE_IMPORT]: 'importLabelTemplate',
+      [IPC_CHANNELS.SCANNER_PROCESS]: 'processScan',
+      [IPC_CHANNELS.SCANNER_GET_HISTORY]: 'getScanHistory',
+      [IPC_CHANNELS.SCANNER_CLEAR_HISTORY]: 'clearScanHistory',
+      [IPC_CHANNELS.SCANNER_GET_SETTINGS]: 'getScannerSettings',
+      [IPC_CHANNELS.SCANNER_SAVE_SETTINGS]: 'saveScannerSettings',
+      [IPC_CHANNELS.SCANNER_CREATE_PRODUCT]: 'createScannerProduct',
+      [IPC_CHANNELS.PRODUCT_GET_ALL]: 'getAllProducts',
+      [IPC_CHANNELS.PRODUCT_CREATE]: 'createProduct',
+      [IPC_CHANNELS.PRODUCT_UPDATE]: 'updateProduct',
+      [IPC_CHANNELS.PRODUCT_DELETE]: 'deleteProduct',
+      [IPC_CHANNELS.CATEGORY_GET_ALL]: 'getCategories',
+      [IPC_CHANNELS.CATEGORY_CREATE]: 'createCategory',
+      [IPC_CHANNELS.CATEGORY_UPDATE]: 'updateCategory',
+      [IPC_CHANNELS.CATEGORY_DELETE]: 'deleteCategory',
+      [IPC_CHANNELS.MASTER_GET_ALL]: 'masterGetAll',
+      [IPC_CHANNELS.MASTER_GET_ACTIVE]: 'masterGetActive',
+      [IPC_CHANNELS.MASTER_CREATE]: 'masterCreate',
+      [IPC_CHANNELS.MASTER_UPDATE]: 'masterUpdate',
+      [IPC_CHANNELS.MASTER_ENABLE]: 'masterEnable',
+      [IPC_CHANNELS.MASTER_DISABLE]: 'masterDisable',
+      [IPC_CHANNELS.MASTER_DELETE]: 'masterDelete',
+    };
+
+    const method = channelToMethodMap[channel];
+    if (method && typeof api[method] === 'function') {
+      console.log(`[TRACE 2.3] Delegating to window.electronAPI.${String(method)}(...)`);
+      const res = await (api[method] as Function)(payload);
+      console.log(`[TRACE 2.3.1] Response from window.electronAPI.${String(method)}:`, res);
+      return res;
+    }
   }
 
-  console.log(`[TRACE 2.4] Falling back to simulateWebIPCResponse for ${channel}`);
+  console.log(`[TRACE 2.4] Falling back to simulateWebIPCResponse for browser mode (${channel})`);
   const res = await simulateWebIPCResponse<T>(channel, payload);
   console.log(`[TRACE 2.4.1] simulateWebIPCResponse response for ${channel}:`, res);
   return res;
@@ -727,6 +895,384 @@ async function simulateWebIPCResponse<T>(channel: string, payload?: unknown): Pr
         return { success: false, error: { code: 'IMPORT_FAILED', message: (err as Error).message }, timestamp };
       }
     }
+
+    // Barcode Scanner IPC Web Simulation Handlers
+    case IPC_CHANNELS.SCANNER_PROCESS: {
+      console.log('[bridge] IPC_CHANNELS.SCANNER_PROCESS invoked with payload:', payload);
+      const opts = (payload as any) || {};
+      const cleanVal = (opts.barcode || '').trim();
+      const now = Date.now();
+      const duplicateScanDelay = 1000;
+
+      if (
+        duplicateScanDelay > 0 &&
+        cleanVal === webLastScannedBarcode &&
+        now - webLastScanTimestamp < duplicateScanDelay
+      ) {
+        console.warn(`[bridge] Suppressed duplicate scan for '${cleanVal}' within ${duplicateScanDelay}ms`);
+        return {
+          success: false,
+          data: {
+            success: false,
+            barcode: opts.barcode,
+            cleanBarcode: cleanVal,
+            product: null,
+            status: 'INVALID',
+            message: `Duplicate scan suppressed (${duplicateScanDelay}ms delay active)`,
+            timestamp,
+          } as T,
+          timestamp,
+        };
+      }
+
+      webLastScannedBarcode = cleanVal;
+      webLastScanTimestamp = now;
+
+      const foundProduct = webMockProducts[cleanVal] || webMockProducts[cleanVal.toUpperCase()] || null;
+      console.log(`[bridge] SCANNER_PROCESS barcode lookup '${cleanVal}':`, foundProduct ? 'FOUND' : 'NOT_FOUND');
+      const status = foundProduct ? 'SUCCESS' : 'NOT_FOUND';
+      const record = {
+        id: Date.now(),
+        barcode: cleanVal,
+        productId: foundProduct?.id || null,
+        productName: foundProduct?.name || 'Unknown Product',
+        sku: foundProduct?.sku || '',
+        category: foundProduct?.category || 'General',
+        price: foundProduct?.price || 0,
+        stock: foundProduct?.stock || 0,
+        location: foundProduct?.location || 'N/A',
+        scanTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        userId: opts.userId || 'Customer Admin',
+        deviceName: opts.deviceName || 'USB HID Scanner',
+        status,
+      };
+      return {
+        success: status === 'SUCCESS',
+        data: {
+          success: status === 'SUCCESS',
+          barcode: opts.barcode,
+          cleanBarcode: cleanVal,
+          product: foundProduct,
+          status,
+          message: foundProduct ? `Product Found: ${foundProduct.name}` : 'Product Not Found',
+          scanRecord: record,
+          timestamp,
+        } as T,
+        timestamp,
+      };
+    }
+
+    case IPC_CHANNELS.SCANNER_GET_HISTORY:
+      return { success: true, data: [] as T, timestamp };
+
+    case IPC_CHANNELS.SCANNER_CLEAR_HISTORY:
+      return { success: true, data: true as T, timestamp };
+
+    case IPC_CHANNELS.SCANNER_GET_SETTINGS:
+      return {
+        success: true,
+        data: {
+          prefix: '',
+          suffix: 'Enter',
+          autoClear: true,
+          autoFocus: true,
+          successSound: true,
+          errorSound: true,
+          continuousScanMode: false,
+          duplicateScanDelay: 1000,
+        } as T,
+        timestamp,
+      };
+
+    case IPC_CHANNELS.SCANNER_SAVE_SETTINGS:
+      return { success: true, data: payload as T, timestamp };
+
+    case IPC_CHANNELS.PRODUCT_GET_ALL: {
+      const list = Object.values(webMockProducts).filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+      return { success: true, data: list as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.SCANNER_CREATE_PRODUCT:
+    case IPC_CHANNELS.PRODUCT_CREATE: {
+      const p = (payload as any) || {};
+      const id = Date.now();
+      const created = {
+        id,
+        name: p.name || 'New Product',
+        barcode: p.barcode || 'MZ-' + id,
+        sku: p.sku || 'SKU-' + id,
+        internalCode: p.internalCode || 'INT-' + id,
+        category: p.category || 'General',
+        price: typeof p.price === 'number' ? p.price : parseFloat(p.price) || 0,
+        purchasePrice: typeof p.purchasePrice === 'number' ? p.purchasePrice : parseFloat(p.purchasePrice) || 0,
+        stock: typeof p.stock === 'number' ? p.stock : parseInt(p.stock, 10) || 0,
+        status: p.status || 'ACTIVE',
+        location: p.location || 'Warehouse A',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      webMockProducts[created.barcode] = created;
+      webMockProducts[created.barcode.toUpperCase()] = created;
+      return { success: true, data: created as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.PRODUCT_UPDATE: {
+      const { id, product } = (payload as { id: number; product: any }) || {};
+      const existing = Object.values(webMockProducts).find((p) => p.id === id);
+      const updated = {
+        ...(existing || {}),
+        ...product,
+        id: id || existing?.id || Date.now(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (updated.barcode) {
+        webMockProducts[updated.barcode] = updated;
+        webMockProducts[updated.barcode.toUpperCase()] = updated;
+      }
+      return { success: true, data: updated as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.PRODUCT_DELETE: {
+      const deleteId = typeof payload === 'number' ? payload : (payload as any)?.id;
+      for (const key of Object.keys(webMockProducts)) {
+        if (webMockProducts[key].id === deleteId) {
+          delete webMockProducts[key];
+        }
+      }
+      return { success: true, data: true as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.CATEGORY_GET_ALL: {
+      const sorted = [...webMockCategories].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+      return { success: true, data: sorted as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.CATEGORY_CREATE: {
+      const p = (payload as any) || {};
+      const userRole = p.userRole || p.role;
+      if (userRole === 'USER' || userRole === 'OPERATOR' || userRole === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Users have read-only access to categories.' }, timestamp };
+      }
+      const trimmedName = (p.name || '').trim();
+      if (!trimmedName) {
+        return { success: false, error: { code: 'VALIDATION_ERROR', message: 'Category name is required.' }, timestamp };
+      }
+      const existing = webMockCategories.find((c) => c.name.toLowerCase() === trimmedName.toLowerCase());
+      if (existing) {
+        return { success: false, error: { code: 'DUPLICATE_CATEGORY', message: `Category "${trimmedName}" already exists.` }, timestamp };
+      }
+      const created = {
+        id: Date.now(),
+        name: trimmedName,
+        description: p.description?.trim() || '',
+        sortOrder: p.sortOrder !== undefined ? p.sortOrder : 0,
+        isActive: p.isActive !== false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: p.createdBy || p.username || 'SYSTEM',
+        updatedBy: p.createdBy || p.username || 'SYSTEM',
+      };
+      webMockCategories.push(created);
+      return { success: true, data: created as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.CATEGORY_UPDATE: {
+      const p = (payload as any) || {};
+      const { id, category, userRole, role } = p;
+      const effectiveRole = userRole || role;
+      if (effectiveRole === 'USER' || effectiveRole === 'OPERATOR' || effectiveRole === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Users cannot update categories.' }, timestamp };
+      }
+      const existing = webMockCategories.find((c) => c.id === id);
+      if (!existing) {
+        return { success: false, error: { code: 'NOT_FOUND', message: 'Category not found' }, timestamp };
+      }
+      const updateData = category || p;
+      if (updateData.name) {
+        const trimmedName = updateData.name.trim();
+        const dup = webMockCategories.find((c) => c.id !== id && c.name.toLowerCase() === trimmedName.toLowerCase());
+        if (dup) {
+          return { success: false, error: { code: 'DUPLICATE_CATEGORY', message: `Category "${trimmedName}" already exists.` }, timestamp };
+        }
+        existing.name = trimmedName;
+      }
+      if (updateData.description !== undefined) existing.description = updateData.description;
+      if (updateData.sortOrder !== undefined) existing.sortOrder = updateData.sortOrder;
+      if (updateData.isActive !== undefined) existing.isActive = updateData.isActive;
+      existing.updatedAt = new Date().toISOString();
+      return { success: true, data: existing as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.CATEGORY_DELETE: {
+      const p = (payload as any) || {};
+      const id = typeof payload === 'number' ? payload : p.id;
+      const effectiveRole = p.userRole || p.role;
+      if (effectiveRole && effectiveRole !== 'OWNER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Only Owner can delete categories.' }, timestamp };
+      }
+      const idx = webMockCategories.findIndex((c) => c.id === id);
+      if (idx !== -1) {
+        webMockCategories.splice(idx, 1);
+        return { success: true, data: true as unknown as T, timestamp };
+      }
+      return { success: false, error: { code: 'NOT_FOUND', message: 'Category not found' }, timestamp };
+    }
+
+    // ENTERPRISE MASTER DATA MOCK IPC HANDLERS
+    case IPC_CHANNELS.MASTER_GET_ALL: {
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const sorted = [...list].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+      return { success: true, data: sorted as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_GET_ACTIVE: {
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const activeOnly = list.filter((item) => item.isActive);
+      const sorted = [...activeOnly].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+      return { success: true, data: sorted as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_CREATE: {
+      const p = (payload as any) || {};
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || (webMockMasterData[moduleName] = []);
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || 'USER').toString().toUpperCase();
+
+      if (role === 'USER' || role === 'OPERATOR' || role === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Read-only access. Insufficient permissions to create master data.' }, timestamp };
+      }
+
+      const trimmedName = (p.name || p.payload?.name || '').trim();
+      const trimmedCode = (p.code || p.payload?.code || '').trim().toUpperCase();
+
+      if (!trimmedName || !trimmedCode) {
+        return { success: false, error: { code: 'VALIDATION_ERROR', message: 'Name and Code are required.' }, timestamp };
+      }
+
+      if (list.some((i) => i.name.toLowerCase() === trimmedName.toLowerCase())) {
+        return { success: false, error: { code: 'DUPLICATE_NAME', message: `Name "${trimmedName}" already exists.` }, timestamp };
+      }
+      if (list.some((i) => i.code.toLowerCase() === trimmedCode.toLowerCase())) {
+        return { success: false, error: { code: 'DUPLICATE_CODE', message: `Code "${trimmedCode}" already exists.` }, timestamp };
+      }
+
+      const newItem = {
+        id: `${moduleName}-${Date.now()}`,
+        name: trimmedName,
+        code: trimmedCode,
+        description: (p.description || p.payload?.description || '').trim(),
+        sortOrder: p.sortOrder !== undefined ? Number(p.sortOrder) : (p.payload?.sortOrder !== undefined ? Number(p.payload.sortOrder) : 0),
+        isActive: p.isActive !== undefined ? Boolean(p.isActive) : (p.payload?.isActive !== undefined ? Boolean(p.payload.isActive) : true),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: p.username || p.payload?.username || 'SYSTEM',
+        updatedBy: p.username || p.payload?.username || 'SYSTEM',
+      };
+
+      list.push(newItem);
+      return { success: true, data: newItem as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_UPDATE: {
+      const p = (payload as any) || {};
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || 'USER').toString().toUpperCase();
+
+      if (role === 'USER' || role === 'OPERATOR' || role === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Read-only access. Insufficient permissions to update master data.' }, timestamp };
+      }
+
+      const item = list.find((i) => i.id === p.id);
+      if (!item) {
+        return { success: false, error: { code: 'NOT_FOUND', message: 'Record not found' }, timestamp };
+      }
+
+      const updateData = p.payload || p;
+      if (updateData.name) {
+        const trimmedName = updateData.name.trim();
+        if (list.some((i) => i.id !== p.id && i.name.toLowerCase() === trimmedName.toLowerCase())) {
+          return { success: false, error: { code: 'DUPLICATE_NAME', message: `Name "${trimmedName}" already exists.` }, timestamp };
+        }
+        item.name = trimmedName;
+      }
+
+      if (updateData.code) {
+        const trimmedCode = updateData.code.trim().toUpperCase();
+        if (list.some((i) => i.id !== p.id && i.code.toLowerCase() === trimmedCode.toLowerCase())) {
+          return { success: false, error: { code: 'DUPLICATE_CODE', message: `Code "${trimmedCode}" already exists.` }, timestamp };
+        }
+        item.code = trimmedCode;
+      }
+
+      if (updateData.description !== undefined) item.description = updateData.description.trim();
+      if (updateData.sortOrder !== undefined) item.sortOrder = Number(updateData.sortOrder);
+      if (updateData.isActive !== undefined) item.isActive = Boolean(updateData.isActive);
+      item.updatedAt = new Date().toISOString();
+
+      return { success: true, data: item as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_ENABLE: {
+      const p = (payload as any) || {};
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || 'USER').toString().toUpperCase();
+
+      if (role === 'USER' || role === 'OPERATOR' || role === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Read-only access. Insufficient permissions.' }, timestamp };
+      }
+
+      const item = list.find((i) => i.id === p.id);
+      if (!item) {
+        return { success: false, error: { code: 'NOT_FOUND', message: 'Record not found' }, timestamp };
+      }
+
+      item.isActive = true;
+      item.updatedAt = new Date().toISOString();
+      return { success: true, data: item as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_DISABLE: {
+      const p = (payload as any) || {};
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || 'USER').toString().toUpperCase();
+
+      if (role === 'USER' || role === 'OPERATOR' || role === 'VIEWER') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Read-only access. Insufficient permissions.' }, timestamp };
+      }
+
+      const item = list.find((i) => i.id === p.id);
+      if (!item) {
+        return { success: false, error: { code: 'NOT_FOUND', message: 'Record not found' }, timestamp };
+      }
+
+      item.isActive = false;
+      item.updatedAt = new Date().toISOString();
+      return { success: true, data: item as unknown as T, timestamp };
+    }
+
+    case IPC_CHANNELS.MASTER_DELETE: {
+      const p = (payload as any) || {};
+      const moduleName = extractModuleName(payload);
+      const list = webMockMasterData[moduleName] || [];
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || 'USER').toString().toUpperCase();
+
+      if (role !== 'OWNER' && role !== 'ADMIN') {
+        return { success: false, error: { code: 'PERMISSION_DENIED', message: 'Insufficient permissions to delete master data records.' }, timestamp };
+      }
+
+      const idx = list.findIndex((i) => i.id === p.id);
+      if (idx !== -1) {
+        list.splice(idx, 1);
+        return { success: true, data: true as unknown as T, timestamp };
+      }
+      return { success: false, error: { code: 'NOT_FOUND', message: 'Record not found' }, timestamp };
+    }
+
     default:
       return {
         success: true,

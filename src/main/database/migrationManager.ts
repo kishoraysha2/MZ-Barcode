@@ -54,21 +54,37 @@ export class MigrationManager {
       const tableExists = dbConnection.get<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='print_jobs'"
       );
-      if (!tableExists) return;
+      if (tableExists) {
+        const columns = dbConnection.all<{ name: string }>("PRAGMA table_info('print_jobs')").map((col) => col.name);
 
-      const columns = dbConnection.all<{ name: string }>("PRAGMA table_info('print_jobs')").map((col) => col.name);
+        if (!columns.includes('zpl_output')) {
+          logger.info('[Migration Manager] Repairing schema: Adding missing zpl_output column to print_jobs');
+          dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN zpl_output TEXT;');
+        }
+        if (!columns.includes('tspl_output')) {
+          logger.info('[Migration Manager] Repairing schema: Adding missing tspl_output column to print_jobs');
+          dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN tspl_output TEXT;');
+        }
+        if (!columns.includes('job_metadata_json')) {
+          logger.info('[Migration Manager] Repairing schema: Adding missing job_metadata_json column to print_jobs');
+          dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN job_metadata_json TEXT DEFAULT '{}';");
+        }
+      }
 
-      if (!columns.includes('zpl_output')) {
-        logger.info('[Migration Manager] Repairing schema: Adding missing zpl_output column to print_jobs');
-        dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN zpl_output TEXT;');
-      }
-      if (!columns.includes('tspl_output')) {
-        logger.info('[Migration Manager] Repairing schema: Adding missing tspl_output column to print_jobs');
-        dbConnection.exec('ALTER TABLE print_jobs ADD COLUMN tspl_output TEXT;');
-      }
-      if (!columns.includes('job_metadata_json')) {
-        logger.info('[Migration Manager] Repairing schema: Adding missing job_metadata_json column to print_jobs');
-        dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN job_metadata_json TEXT DEFAULT '{}';");
+      const productsExists = dbConnection.get<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='products'"
+      );
+      if (productsExists) {
+        const prodCols = dbConnection.all<{ name: string }>("PRAGMA table_info('products')").map((col) => col.name);
+
+        if (!prodCols.includes('purchase_price')) {
+          logger.info('[Migration Manager] Repairing schema: Adding missing purchase_price column to products');
+          dbConnection.exec('ALTER TABLE products ADD COLUMN purchase_price REAL DEFAULT 0.00;');
+        }
+        if (!prodCols.includes('status')) {
+          logger.info('[Migration Manager] Repairing schema: Adding missing status column to products');
+          dbConnection.exec("ALTER TABLE products ADD COLUMN status TEXT DEFAULT 'ACTIVE';");
+        }
       }
     } catch (err) {
       logger.error('[Migration Manager] Schema integrity check error:', err);

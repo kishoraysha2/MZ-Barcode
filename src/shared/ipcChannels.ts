@@ -75,4 +75,33 @@ export enum IPC_CHANNELS {
   USER_CHANGE_ROLE = 'ipc:user:change_role',
   ROLE_LIST = 'ipc:role:list',
   PERMISSIONS_GET = 'ipc:permissions:get',
+
+  // Sprint 7 Barcode Scanner IPC Foundation
+  SCANNER_PROCESS = 'ipc:scanner:process',
+  SCANNER_GET_HISTORY = 'ipc:scanner:get_history',
+  SCANNER_CLEAR_HISTORY = 'ipc:scanner:clear_history',
+  SCANNER_GET_SETTINGS = 'ipc:scanner:get_settings',
+  SCANNER_SAVE_SETTINGS = 'ipc:scanner:save_settings',
+  SCANNER_CREATE_PRODUCT = 'ipc:scanner:create_product',
+
+  // Product Management Module IPC
+  PRODUCT_GET_ALL = 'ipc:product:get_all',
+  PRODUCT_CREATE = 'ipc:product:create',
+  PRODUCT_UPDATE = 'ipc:product:update',
+  PRODUCT_DELETE = 'ipc:product:delete',
+
+  // Category Management Module IPC
+  CATEGORY_GET_ALL = 'ipc:category:get_all',
+  CATEGORY_CREATE = 'ipc:category:create',
+  CATEGORY_UPDATE = 'ipc:category:update',
+  CATEGORY_DELETE = 'ipc:category:delete',
+
+  // Enterprise Master Data Framework IPC
+  MASTER_GET_ALL = 'ipc:master:get_all',
+  MASTER_GET_ACTIVE = 'ipc:master:get_active',
+  MASTER_CREATE = 'ipc:master:create',
+  MASTER_UPDATE = 'ipc:master:update',
+  MASTER_ENABLE = 'ipc:master:enable',
+  MASTER_DISABLE = 'ipc:master:disable',
+  MASTER_DELETE = 'ipc:master:delete',
 }

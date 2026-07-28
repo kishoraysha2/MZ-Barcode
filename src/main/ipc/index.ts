@@ -7,6 +7,9 @@ import { registerPrinterIPC } from './printerIPC';
 import { registerBarcodeIPC } from './barcodeIPC';
 import { registerAuthIPC } from './authIPC';
 import { registerTemplateIPC } from './templateIPC';
+import { registerScannerIPC } from './scannerIPC';
+import { registerCategoryIPC } from './categoryIPC';
+import { registerMasterIPC } from './masterIPC';
 import { logger } from '../logger';
 
 export function registerAllIPCHandlers(
@@ -22,5 +25,8 @@ export function registerAllIPCHandlers(
   registerBarcodeIPC(registerHandler);
   registerAuthIPC(registerHandler);
   registerTemplateIPC(registerHandler);
+  registerScannerIPC(registerHandler);
+  registerCategoryIPC(registerHandler);
+  registerMasterIPC(registerHandler);
   logger.info('IPC Channel Registration Complete.');
 }

@@ -14,13 +14,18 @@ export class QueryBuilder {
     const sql = `SELECT ${columns.join(', ')} FROM ${table} ${whereClause} ${orderClause} ${limitClause} ${offsetClause};`.trim();
     const params = keys.map((k) => where[k]);
 
+    console.log('[QB] SQL:', sql);
+    console.log('[QB] Params:', params);
+
     this.cache(sql);
     return dbConnection.all<T>(sql, params);
   }
 
   public static selectOne<T = any>(table: string, where: Record<string, any>): T | undefined {
     const results = this.select<T>(table, ['*'], where, { limit: 1 });
-    return results[0];
+    const row = results[0];
+    console.log('[QB] Row:', row);
+    return row;
   }
 
   public static insert(table: string, data: Record<string, any>): QueryResult {

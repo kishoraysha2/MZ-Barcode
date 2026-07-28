@@ -8,6 +8,9 @@ import { UsersPage } from './renderer/pages/UsersPage';
 import { SettingsPage } from './renderer/pages/SettingsPage';
 import { LicensePage } from './renderer/pages/LicensePage';
 import { BackupPage } from './renderer/pages/BackupPage';
+import { ProductsPage } from './renderer/pages/ProductsPage';
+import { MasterPage } from './renderer/components/master/MasterPage';
+import { BarcodeScannerView } from './views/BarcodeScannerView';
 import { OwnerConsoleView } from './views/OwnerConsoleView';
 import { useApplicationStatusStore } from './renderer/stores/applicationStatusStore';
 import { useThemeStore } from './renderer/stores/themeStore';
@@ -36,6 +39,13 @@ export function App() {
       {edition === 'customer' ? (
         <>
           {activeView === 'dashboard' && <DashboardPage />}
+          {activeView === 'products' && <ProductsPage />}
+          {activeView === 'master_categories' && <MasterPage moduleName="categories" />}
+          {activeView === 'master_units' && <MasterPage moduleName="units" />}
+          {activeView === 'master_brands' && <MasterPage moduleName="brands" />}
+          {activeView === 'master_warehouses' && <MasterPage moduleName="warehouses" />}
+          {activeView === 'master_suppliers' && <MasterPage moduleName="suppliers" />}
+          {activeView === 'scanner' && <BarcodeScannerView />}
           {activeView === 'generator' && <GeneratorPage />}
           {activeView === 'history' && <HistoryPage />}
           {activeView === 'designer' && <DesignerPage />}

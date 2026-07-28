@@ -11,4 +11,7 @@ export * from './AuditRepository';
 export * from './BackupRepository';
 export * from './DashboardRepository';
 export * from './PrinterRepository';
+export * from './ScannerRepository';
+export * from './CategoryRepository';
+export * from './BaseMasterRepository';
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Barcode,
+  ScanLine,
   History,
   Layout,
   Users,
@@ -18,7 +19,13 @@ import {
   Sparkles,
   Printer,
   ShieldCheck,
-  Unlock
+  Unlock,
+  Package,
+  Layers,
+  PackageCheck,
+  Tag,
+  Building,
+  Truck,
 } from 'lucide-react';
 import { AppEdition, UserRole } from '../../types';
 import { electronBridge } from '../../preload/bridge';
@@ -66,6 +73,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Customer Suite Nav
   const customerNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'products', label: 'Products', icon: Package, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'master_categories', label: 'Categories Master', icon: Layers, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'master_units', label: 'Units Master', icon: PackageCheck, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'master_brands', label: 'Brands Master', icon: Tag, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'master_warehouses', label: 'Warehouses Master', icon: Building, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'master_suppliers', label: 'Suppliers Master', icon: Truck, roles: ['OWNER', 'ADMIN', 'USER'] },
+    { id: 'scanner', label: 'Barcode Scanner', icon: ScanLine, roles: ['OWNER', 'ADMIN', 'USER'] },
     { id: 'generator', label: 'Barcode Generator', icon: Barcode, roles: ['OWNER', 'ADMIN', 'USER'] },
     { id: 'history', label: 'History & Search', icon: History, roles: ['OWNER', 'ADMIN', 'USER'] },
     { id: 'designer', label: 'Label Designer', icon: Layout, roles: ['OWNER', 'ADMIN'] },

@@ -18,6 +18,7 @@ export class SQLiteConnection {
 
   private constructor() {
     this.dbPath = path.join(getSuiteRootPath(), 'data', DEFAULT_DB_FILENAME);
+    console.log('[DB] Connection Constructor called. dbPath:', this.dbPath);
   }
 
   public static getInstance(): SQLiteConnection {
@@ -50,6 +51,21 @@ export class SQLiteConnection {
 
       logger.info(`[Database] Connected to SQLite DB at ${this.dbPath}`);
       this.isConnected = true;
+
+      console.log('[DB] Connection Object:', this.db);
+      console.log('[DB] Database Path:', this.dbPath);
+      console.log('[DB] getDbPath():', this.getDbPath());
+      console.log('[DB] Is Open:', !!this.db);
+
+      try {
+        const count = this.get<{ total: number }>('SELECT COUNT(*) AS total FROM products;');
+        console.log('[DB] SELECT COUNT(*) AS total FROM products; =>', count);
+
+        const rows = this.all<{ barcode: string; name: string }>('SELECT barcode, name FROM products;');
+        console.log('[DB] SELECT barcode, name FROM products; =>', rows);
+      } catch (e) {
+        console.log('[DB] Diagnostics query error (table might not exist yet):', e);
+      }
     } catch (err) {
       logger.error('[Database] Failed connecting to SQLite database:', err);
       throw err;
@@ -98,6 +114,7 @@ export class SQLiteConnection {
 
   private ensureConnected() {
     if (!this.isConnected || !this.db) {
+      console.log('[DB] ensureConnected triggering connect()');
       this.connect();
     }
   }

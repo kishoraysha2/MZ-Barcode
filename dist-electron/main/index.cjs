@@ -164,6 +164,7 @@ var init_connection = __esm({
         this.db = null;
         this.isConnected = false;
         this.dbPath = import_path3.default.join(getSuiteRootPath(), "data", DEFAULT_DB_FILENAME);
+        console.log("[DB] Connection Constructor called. dbPath:", this.dbPath);
       }
       static getInstance() {
         if (!_SQLiteConnection.instance) {
@@ -190,6 +191,18 @@ var init_connection = __esm({
           }
           logger.info(`[Database] Connected to SQLite DB at ${this.dbPath}`);
           this.isConnected = true;
+          console.log("[DB] Connection Object:", this.db);
+          console.log("[DB] Database Path:", this.dbPath);
+          console.log("[DB] getDbPath():", this.getDbPath());
+          console.log("[DB] Is Open:", !!this.db);
+          try {
+            const count = this.get("SELECT COUNT(*) AS total FROM products;");
+            console.log("[DB] SELECT COUNT(*) AS total FROM products; =>", count);
+            const rows = this.all("SELECT barcode, name FROM products;");
+            console.log("[DB] SELECT barcode, name FROM products; =>", rows);
+          } catch (e) {
+            console.log("[DB] Diagnostics query error (table might not exist yet):", e);
+          }
         } catch (err) {
           logger.error("[Database] Failed connecting to SQLite database:", err);
           throw err;
@@ -231,6 +244,7 @@ var init_connection = __esm({
       }
       ensureConnected() {
         if (!this.isConnected || !this.db) {
+          console.log("[DB] ensureConnected triggering connect()");
           this.connect();
         }
       }
@@ -268,12 +282,16 @@ var init_queryBuilder = __esm({
         const offsetClause = options.offset ? `OFFSET ${options.offset}` : "";
         const sql = `SELECT ${columns.join(", ")} FROM ${table} ${whereClause} ${orderClause} ${limitClause} ${offsetClause};`.trim();
         const params = keys.map((k) => where[k]);
+        console.log("[QB] SQL:", sql);
+        console.log("[QB] Params:", params);
         this.cache(sql);
         return dbConnection.all(sql, params);
       }
       static selectOne(table, where) {
         const results = this.select(table, ["*"], where, { limit: 1 });
-        return results[0];
+        const row = results[0];
+        console.log("[QB] Row:", row);
+        return row;
       }
       static insert(table, data) {
         const keys = Object.keys(data);
@@ -829,6 +847,288 @@ var migration0008 = {
   }
 };
 
+// src/main/database/migrations/0009_scan_history.ts
+var migration0009 = {
+  version: 9,
+  name: "0009_scan_history",
+  up: `
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      barcode TEXT UNIQUE,
+      sku TEXT UNIQUE,
+      internal_code TEXT UNIQUE,
+      category TEXT DEFAULT 'General',
+      price REAL DEFAULT 0.00,
+      stock INTEGER DEFAULT 0,
+      location TEXT DEFAULT 'Warehouse A',
+      image_url TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS scan_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barcode TEXT NOT NULL,
+      product_id INTEGER,
+      scan_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      user_id TEXT DEFAULT 'SYSTEM',
+      device_name TEXT DEFAULT 'USB HID Scanner',
+      status TEXT NOT NULL,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
+    CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+    CREATE INDEX IF NOT EXISTS idx_products_internal_code ON products(internal_code);
+    CREATE INDEX IF NOT EXISTS idx_scan_history_barcode ON scan_history(barcode);
+    CREATE INDEX IF NOT EXISTS idx_scan_history_scan_time ON scan_history(scan_time);
+
+    -- Seed sample products for testing
+    INSERT OR IGNORE INTO products (id, name, barcode, sku, internal_code, category, price, stock, location)
+    VALUES 
+      (1, 'Enterprise Thermal Barcode Label Printer', 'MZ-88492014', 'SKU-PRN-8849', 'INT-88492014', 'HARDWARE', 349.99, 18, 'Aisle 4 - Shelf B'),
+      (2, 'Standard Shipping Label Roll (100x50mm)', 'MZ-10000001', 'SKU-LBL-10050', 'INT-10000001', 'SUPPLIES', 24.50, 142, 'Aisle 1 - Shelf A'),
+      (3, 'Wireless USB Barcode Scanner Wedge', 'MZ-10000002', 'SKU-SCN-0002', 'INT-10000002', 'HARDWARE', 89.00, 35, 'Aisle 4 - Shelf C'),
+      (4, 'Asset Tag Heavy Duty Polymer Roll', 'MZ-10000003', 'SKU-AST-5025', 'INT-10000003', 'SUPPLIES', 42.00, 80, 'Aisle 2 - Shelf B'),
+      (5, 'Industrial QR Asset Code Tag', '100012345', 'SKU-QR-10001', 'INT-100012345', 'ASSET', 12.99, 500, 'Aisle 3 - Shelf D');
+  `,
+  down: `
+    DROP TABLE IF EXISTS scan_history;
+    DROP TABLE IF EXISTS products;
+  `
+};
+
+// src/main/database/migrations/0010_categories.ts
+var migration0010 = {
+  version: 10,
+  name: "0010_categories",
+  up: `
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);
+    CREATE INDEX IF NOT EXISTS idx_categories_sort ON categories(sort_order, name);
+
+    INSERT OR IGNORE INTO categories (name, description, sort_order) VALUES
+      ('GENERAL', 'General uncategorized items', 1),
+      ('HARDWARE', 'Physical equipment and hardware devices', 2),
+      ('SUPPLIES', 'Consumables, packaging, and office supplies', 3),
+      ('ASSET', 'Fixed company assets and serialized tools', 4),
+      ('ELECTRONICS', 'Electronic parts and gadgets', 5),
+      ('ACCESSORIES', 'Peripherals and auxiliary accessories', 6);
+  `,
+  down: `
+    DROP TABLE IF EXISTS categories;
+  `
+};
+
+// src/main/database/migrations/0011_enterprise_master_data.ts
+var migration0011 = {
+  version: 11,
+  name: "0011_enterprise_master_data",
+  up: `
+    -- Categories Table
+    CREATE TABLE IF NOT EXISTS master_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+    CREATE INDEX IF NOT EXISTS idx_mcat_name ON master_categories(name);
+    CREATE INDEX IF NOT EXISTS idx_mcat_code ON master_categories(code);
+
+    -- Units Table
+    CREATE TABLE IF NOT EXISTS master_units (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+    CREATE INDEX IF NOT EXISTS idx_munit_name ON master_units(name);
+    CREATE INDEX IF NOT EXISTS idx_munit_code ON master_units(code);
+
+    -- Brands Table
+    CREATE TABLE IF NOT EXISTS master_brands (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+    CREATE INDEX IF NOT EXISTS idx_mbrand_name ON master_brands(name);
+    CREATE INDEX IF NOT EXISTS idx_mbrand_code ON master_brands(code);
+
+    -- Warehouses Table
+    CREATE TABLE IF NOT EXISTS master_warehouses (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+    CREATE INDEX IF NOT EXISTS idx_mwhs_name ON master_warehouses(name);
+    CREATE INDEX IF NOT EXISTS idx_mwhs_code ON master_warehouses(code);
+
+    -- Suppliers Table
+    CREATE TABLE IF NOT EXISTS master_suppliers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+    CREATE INDEX IF NOT EXISTS idx_msup_name ON master_suppliers(name);
+    CREATE INDEX IF NOT EXISTS idx_msup_code ON master_suppliers(code);
+
+    -- Seed Initial Enterprise Master Data with UUIDs
+    INSERT OR IGNORE INTO master_categories (id, name, code, description, sort_order) VALUES
+      ('cat-uuid-001', 'General', 'CAT-GEN', 'General uncategorized items', 1),
+      ('cat-uuid-002', 'Hardware', 'CAT-HWD', 'Physical equipment and hardware tools', 2),
+      ('cat-uuid-003', 'Supplies', 'CAT-SUP', 'Consumables, packaging, and office supplies', 3),
+      ('cat-uuid-004', 'Electronics', 'CAT-ELE', 'Electronic parts and components', 4),
+      ('cat-uuid-005', 'Accessories', 'CAT-ACC', 'Auxiliary parts and peripheral accessories', 5);
+
+    INSERT OR IGNORE INTO master_units (id, name, code, description, sort_order) VALUES
+      ('uom-uuid-001', 'Pieces', 'PCS', 'Individual count units', 1),
+      ('uom-uuid-002', 'Boxes', 'BOX', 'Box container packs', 2),
+      ('uom-uuid-003', 'Kilograms', 'KG', 'Weight measurement in kilograms', 3),
+      ('uom-uuid-004', 'Meters', 'MTR', 'Length measurement in meters', 4),
+      ('uom-uuid-005', 'Sets', 'SET', 'Assembled set packs', 5);
+
+    INSERT OR IGNORE INTO master_brands (id, name, code, description, sort_order) VALUES
+      ('brd-uuid-001', 'MZ Enterprise', 'MZ-ENT', 'Primary house brand products', 1),
+      ('brd-uuid-002', 'LogiTech Pro', 'LOGI', 'Hardware and scanner equipment', 2),
+      ('brd-uuid-003', 'Zebra Tech', 'ZEBRA', 'Thermal printers and barcode tech', 3),
+      ('brd-uuid-004', 'Honeywell', 'HNW', 'Industrial scanner devices', 4);
+
+    INSERT OR IGNORE INTO master_warehouses (id, name, code, description, sort_order) VALUES
+      ('whs-uuid-001', 'Main Central Warehouse', 'WHS-MAIN', 'Primary distribution facility and hub', 1),
+      ('whs-uuid-002', 'North Storage Annex', 'WHS-NTH', 'Secondary overflow regional storage', 2),
+      ('whs-uuid-003', 'Retail Front Depot', 'WHS-RTL', 'Storefront quick pick inventory depot', 3);
+
+    INSERT OR IGNORE INTO master_suppliers (id, name, code, description, sort_order) VALUES
+      ('sup-uuid-001', 'Apex Logistics & Supply', 'SUP-APEX', 'Primary raw materials supplier', 1),
+      ('sup-uuid-002', 'Global Barcode Systems', 'SUP-GBS', 'Hardware and printer media partner', 2),
+      ('sup-uuid-003', 'Omni Components Ltd', 'SUP-OMNI', 'Electronics and component distributor', 3);
+  `,
+  down: `
+    DROP TABLE IF EXISTS master_suppliers;
+    DROP TABLE IF EXISTS master_warehouses;
+    DROP TABLE IF EXISTS master_brands;
+    DROP TABLE IF EXISTS master_units;
+    DROP TABLE IF EXISTS master_categories;
+  `
+};
+
+// src/main/database/migrations/0012_product_master_ids.ts
+var migration0012 = {
+  version: 12,
+  name: "0012_product_master_ids",
+  up: `
+    -- Safely add master data foreign key columns to products table if they do not exist
+    ALTER TABLE products ADD COLUMN category_id TEXT DEFAULT 'cat-uuid-001';
+    ALTER TABLE products ADD COLUMN unit_id TEXT DEFAULT 'uom-uuid-001';
+    ALTER TABLE products ADD COLUMN brand_id TEXT DEFAULT 'brd-uuid-001';
+    ALTER TABLE products ADD COLUMN warehouse_id TEXT DEFAULT 'whs-uuid-001';
+    ALTER TABLE products ADD COLUMN supplier_id TEXT DEFAULT 'sup-uuid-001';
+
+    CREATE INDEX IF NOT EXISTS idx_prod_category_id ON products(category_id);
+    CREATE INDEX IF NOT EXISTS idx_prod_unit_id ON products(unit_id);
+    CREATE INDEX IF NOT EXISTS idx_prod_brand_id ON products(brand_id);
+    CREATE INDEX IF NOT EXISTS idx_prod_warehouse_id ON products(warehouse_id);
+    CREATE INDEX IF NOT EXISTS idx_prod_supplier_id ON products(supplier_id);
+  `,
+  down: `
+    -- SQLite does not support DROP COLUMN in older versions easily
+  `
+};
+
+// src/main/database/migrations/0013_deprecate_legacy_categories.ts
+var migration0013 = {
+  version: 13,
+  name: "0013_deprecate_legacy_categories",
+  up: `
+    INSERT OR IGNORE INTO master_categories (
+      id,
+      name,
+      code,
+      description,
+      sort_order,
+      is_active,
+      created_at,
+      updated_at,
+      created_by,
+      updated_by
+    )
+    SELECT
+      'cat-legacy-' || CAST(id AS TEXT),
+      name,
+      'CAT-LEG-' || CAST(id AS TEXT),
+      COALESCE(description, ''),
+      COALESCE(sort_order, 0),
+      COALESCE(is_active, 1),
+      COALESCE(created_at, CURRENT_TIMESTAMP),
+      COALESCE(updated_at, CURRENT_TIMESTAMP),
+      COALESCE(created_by, 'SYSTEM'),
+      COALESCE(updated_by, 'SYSTEM')
+    FROM categories
+    WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='categories');
+
+    DROP TABLE IF EXISTS categories;
+  `,
+  down: `
+    -- Recreate legacy categories table if rolling back
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT 'SYSTEM',
+      updated_by TEXT DEFAULT 'SYSTEM'
+    );
+  `
+};
+
 // src/main/database/migrations/index.ts
 var ALL_MIGRATIONS = [
   migration0001,
@@ -838,7 +1138,12 @@ var ALL_MIGRATIONS = [
   migration0005,
   migration0006,
   migration0007,
-  migration0008
+  migration0008,
+  migration0009,
+  migration0010,
+  migration0011,
+  migration0012,
+  migration0013
 ];
 
 // src/main/database/migrationManager.ts
@@ -877,19 +1182,34 @@ var MigrationManager = class {
       const tableExists = dbConnection.get(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='print_jobs'"
       );
-      if (!tableExists) return;
-      const columns = dbConnection.all("PRAGMA table_info('print_jobs')").map((col) => col.name);
-      if (!columns.includes("zpl_output")) {
-        logger.info("[Migration Manager] Repairing schema: Adding missing zpl_output column to print_jobs");
-        dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN zpl_output TEXT;");
+      if (tableExists) {
+        const columns = dbConnection.all("PRAGMA table_info('print_jobs')").map((col) => col.name);
+        if (!columns.includes("zpl_output")) {
+          logger.info("[Migration Manager] Repairing schema: Adding missing zpl_output column to print_jobs");
+          dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN zpl_output TEXT;");
+        }
+        if (!columns.includes("tspl_output")) {
+          logger.info("[Migration Manager] Repairing schema: Adding missing tspl_output column to print_jobs");
+          dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN tspl_output TEXT;");
+        }
+        if (!columns.includes("job_metadata_json")) {
+          logger.info("[Migration Manager] Repairing schema: Adding missing job_metadata_json column to print_jobs");
+          dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN job_metadata_json TEXT DEFAULT '{}';");
+        }
       }
-      if (!columns.includes("tspl_output")) {
-        logger.info("[Migration Manager] Repairing schema: Adding missing tspl_output column to print_jobs");
-        dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN tspl_output TEXT;");
-      }
-      if (!columns.includes("job_metadata_json")) {
-        logger.info("[Migration Manager] Repairing schema: Adding missing job_metadata_json column to print_jobs");
-        dbConnection.exec("ALTER TABLE print_jobs ADD COLUMN job_metadata_json TEXT DEFAULT '{}';");
+      const productsExists = dbConnection.get(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='products'"
+      );
+      if (productsExists) {
+        const prodCols = dbConnection.all("PRAGMA table_info('products')").map((col) => col.name);
+        if (!prodCols.includes("purchase_price")) {
+          logger.info("[Migration Manager] Repairing schema: Adding missing purchase_price column to products");
+          dbConnection.exec("ALTER TABLE products ADD COLUMN purchase_price REAL DEFAULT 0.00;");
+        }
+        if (!prodCols.includes("status")) {
+          logger.info("[Migration Manager] Repairing schema: Adding missing status column to products");
+          dbConnection.exec("ALTER TABLE products ADD COLUMN status TEXT DEFAULT 'ACTIVE';");
+        }
       }
     } catch (err) {
       logger.error("[Migration Manager] Schema integrity check error:", err);
@@ -5137,6 +5457,1356 @@ function registerTemplateIPC(registerHandler) {
   });
 }
 
+// src/main/database/repositories/ScannerRepository.ts
+init_BaseRepository();
+init_queryBuilder();
+init_connection();
+var ScannerRepository = class extends BaseRepository {
+  constructor() {
+    super(...arguments);
+    this.tableName = "scan_history";
+    this.localHistory = [];
+    this.localProducts = [];
+  }
+  findByBarcode(barcode) {
+    return this.findProductByCode(barcode);
+  }
+  findProductByCode(code) {
+    if (!code) return null;
+    const cleanCode = code.trim().toUpperCase();
+    const dbPath = dbConnection.getDbPath();
+    const sql = `SELECT * FROM products WHERE barcode = ? LIMIT 1;`;
+    console.log("[LOOKUP] Database Path:", dbPath);
+    console.log("[LOOKUP] SQL:", sql);
+    console.log("[LOOKUP] Barcode:", code);
+    const memMatch = this.localProducts.find(
+      (p) => p.barcode.toUpperCase() === cleanCode || p.sku && p.sku.toUpperCase() === cleanCode || p.internalCode && p.internalCode.toUpperCase() === cleanCode
+    );
+    if (memMatch) {
+      console.log("[LOOKUP] Result:", memMatch);
+      return memMatch;
+    }
+    try {
+      const dbMatch = QueryBuilder.selectOne("products", { barcode: code });
+      if (dbMatch) {
+        const prod = {
+          id: dbMatch.id,
+          name: dbMatch.name,
+          barcode: dbMatch.barcode,
+          sku: dbMatch.sku,
+          internalCode: dbMatch.internal_code,
+          category: dbMatch.category,
+          price: dbMatch.price,
+          stock: dbMatch.stock,
+          location: dbMatch.location,
+          imageUrl: dbMatch.image_url,
+          createdAt: dbMatch.created_at,
+          updatedAt: dbMatch.updated_at
+        };
+        console.log("[LOOKUP] Result:", prod);
+        return prod;
+      }
+    } catch (err) {
+      console.error("[LOOKUP] QueryBuilder error:", err);
+    }
+    const barcodeRecord = barcodeRepository.findByBarcodeValue(code);
+    if (barcodeRecord) {
+      const prod = {
+        id: barcodeRecord.id,
+        name: barcodeRecord.title || "Barcoded Inventory Item",
+        barcode: barcodeRecord.barcode_value,
+        sku: `SKU-${barcodeRecord.barcode_value}`,
+        internalCode: `INT-${barcodeRecord.barcode_value}`,
+        category: barcodeRecord.category || "GENERAL",
+        price: 29.99,
+        stock: 100,
+        location: "Main Warehouse - Bin 01",
+        createdAt: barcodeRecord.created_at
+      };
+      console.log("[LOOKUP] Result:", prod);
+      return prod;
+    }
+    console.log("[LOOKUP] Result:", null);
+    return null;
+  }
+  saveScanHistory(params) {
+    const id = Date.now() + Math.floor(Math.random() * 1e3);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    const record = {
+      id,
+      barcode: params.barcode,
+      productId: params.productId || null,
+      productName: params.productName || (params.status === "SUCCESS" ? "Found Item" : "Unknown Product"),
+      sku: params.sku || "",
+      category: params.category || "General",
+      price: params.price || 0,
+      stock: params.stock || 0,
+      location: params.location || "N/A",
+      scanTime: nowIso,
+      userId: params.userId || "Customer Admin",
+      deviceName: params.deviceName || "USB HID Scanner",
+      status: params.status
+    };
+    this.localHistory.unshift(record);
+    try {
+      QueryBuilder.insert(this.tableName, {
+        barcode: params.barcode,
+        product_id: params.productId || null,
+        user_id: params.userId || "Customer Admin",
+        device_name: params.deviceName || "USB HID Scanner",
+        status: params.status
+      });
+    } catch (err) {
+    }
+    return record;
+  }
+  getRecentScanHistory(limit = 50) {
+    return this.localHistory.slice(0, limit);
+  }
+  clearScanHistory() {
+    this.localHistory = [];
+    try {
+      dbConnection.run(`DELETE FROM ${this.tableName}`);
+    } catch {
+    }
+    return true;
+  }
+  getAllProducts() {
+    try {
+      const rows = dbConnection.all("SELECT * FROM products ORDER BY id DESC");
+      console.log("[TRACE 1] Number of rows returned from SQLite products table:", rows?.length ?? 0);
+      const dbProducts = (rows || []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        barcode: r.barcode,
+        sku: r.sku,
+        internalCode: r.internal_code,
+        category: r.category,
+        price: r.price,
+        purchasePrice: r.purchase_price ?? 0,
+        stock: r.stock,
+        status: r.status || "ACTIVE",
+        location: r.location,
+        imageUrl: r.image_url,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      }));
+      console.log("[TRACE 1.1] Total product rows returned from ScannerRepository:", dbProducts.length);
+      return dbProducts;
+    } catch (err) {
+      console.error("[ScannerRepository] getAllProducts error:", err);
+    }
+    return [];
+  }
+  createProduct(params) {
+    console.log("[ScannerRepository] createProduct called with params:", params);
+    const id = Date.now();
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    const product = {
+      id,
+      name: params.name || "New Product",
+      barcode: params.barcode || `MZ-${id}`,
+      sku: params.sku || `SKU-${id}`,
+      internalCode: params.internalCode || `INT-${id}`,
+      category: params.category || "GENERAL",
+      price: typeof params.price === "number" ? params.price : parseFloat(params.price) || 0,
+      purchasePrice: typeof params.purchasePrice === "number" ? params.purchasePrice : parseFloat(params.purchasePrice) || 0,
+      stock: typeof params.stock === "number" ? params.stock : parseInt(params.stock, 10) || 0,
+      status: params.status || "ACTIVE",
+      location: params.location || "Warehouse A",
+      imageUrl: params.imageUrl || "",
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+    this.localProducts.unshift(product);
+    const insertData = {
+      name: product.name,
+      barcode: product.barcode,
+      sku: product.sku,
+      internal_code: product.internalCode,
+      category: product.category,
+      price: product.price,
+      purchase_price: product.purchasePrice,
+      stock: product.stock,
+      status: product.status,
+      location: product.location,
+      image_url: product.imageUrl
+    };
+    try {
+      console.log("[ScannerRepository] Executing SQLite INSERT into products table...");
+      QueryBuilder.insert("products", insertData);
+      const createdRow = QueryBuilder.selectOne("products", { barcode: product.barcode });
+      if (createdRow && createdRow.id) {
+        product.id = createdRow.id;
+      }
+    } catch (err) {
+      console.error("[CREATE PRODUCT] INSERT THREW EXCEPTION:", err);
+    }
+    return product;
+  }
+  updateProduct(id, params) {
+    console.log("[ScannerRepository] updateProduct called for id:", id, params);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    const updateData = {
+      updated_at: nowIso
+    };
+    if (params.name !== void 0) updateData.name = params.name;
+    if (params.barcode !== void 0) updateData.barcode = params.barcode;
+    if (params.sku !== void 0) updateData.sku = params.sku;
+    if (params.internalCode !== void 0) updateData.internal_code = params.internalCode;
+    if (params.category !== void 0) updateData.category = params.category;
+    if (params.price !== void 0) updateData.price = typeof params.price === "number" ? params.price : parseFloat(params.price) || 0;
+    if (params.purchasePrice !== void 0) updateData.purchase_price = typeof params.purchasePrice === "number" ? params.purchasePrice : parseFloat(params.purchasePrice) || 0;
+    if (params.stock !== void 0) updateData.stock = typeof params.stock === "number" ? params.stock : parseInt(params.stock, 10) || 0;
+    if (params.status !== void 0) updateData.status = params.status;
+    if (params.location !== void 0) updateData.location = params.location;
+    if (params.imageUrl !== void 0) updateData.image_url = params.imageUrl;
+    try {
+      QueryBuilder.update("products", updateData, { id });
+      console.log("[ScannerRepository] SQLite UPDATE executed successfully for id:", id);
+    } catch (err) {
+      console.error("[ScannerRepository] updateProduct SQLite error:", err);
+    }
+    const index = this.localProducts.findIndex((p) => p.id === id || params.barcode && p.barcode === params.barcode);
+    let updatedProduct;
+    if (index !== -1) {
+      this.localProducts[index] = {
+        ...this.localProducts[index],
+        ...params,
+        updatedAt: nowIso
+      };
+      updatedProduct = this.localProducts[index];
+    } else {
+      updatedProduct = {
+        id,
+        name: params.name || "Updated Product",
+        barcode: params.barcode || "",
+        sku: params.sku || "",
+        internalCode: params.internalCode || "",
+        category: params.category || "GENERAL",
+        price: typeof params.price === "number" ? params.price : parseFloat(params.price) || 0,
+        purchasePrice: typeof params.purchasePrice === "number" ? params.purchasePrice : parseFloat(params.purchasePrice) || 0,
+        stock: typeof params.stock === "number" ? params.stock : parseInt(params.stock, 10) || 0,
+        status: params.status || "ACTIVE",
+        location: params.location || "Warehouse A",
+        imageUrl: params.imageUrl || "",
+        updatedAt: nowIso
+      };
+      this.localProducts.unshift(updatedProduct);
+    }
+    return updatedProduct;
+  }
+  deleteProduct(id) {
+    console.log("[ScannerRepository] deleteProduct called for id:", id);
+    try {
+      dbConnection.run("DELETE FROM products WHERE id = ?", [id]);
+      console.log("[ScannerRepository] SQLite DELETE executed successfully for id:", id);
+    } catch (err) {
+      console.error("[ScannerRepository] deleteProduct SQLite error:", err);
+    }
+    this.localProducts = this.localProducts.filter((p) => p.id !== id);
+    return true;
+  }
+};
+var scannerRepository = new ScannerRepository();
+
+// src/main/services/ScannerService.ts
+init_logger();
+var ScannerService = class {
+  constructor() {
+    this.settings = {
+      prefix: "",
+      suffix: "Enter",
+      autoClear: true,
+      autoFocus: true,
+      successSound: true,
+      errorSound: true,
+      continuousScanMode: false,
+      duplicateScanDelay: 1e3
+    };
+    this.lastScannedBarcode = "";
+    this.lastScanTimestamp = 0;
+  }
+  getSettings() {
+    return { ...this.settings };
+  }
+  saveSettings(newSettings) {
+    this.settings = { ...this.settings, ...newSettings };
+    logger.info("[ScannerService] Updated scanner settings:", this.settings);
+    return this.getSettings();
+  }
+  async processScan(options) {
+    const rawBarcode = options.barcode || "";
+    const now = Date.now();
+    console.log("========== PROCESS SCAN CALLED ==========");
+    console.log("[SCAN] Barcode:", rawBarcode);
+    let cleanBarcode = rawBarcode.trim();
+    if (this.settings.prefix && cleanBarcode.startsWith(this.settings.prefix)) {
+      cleanBarcode = cleanBarcode.substring(this.settings.prefix.length);
+    }
+    if (this.settings.duplicateScanDelay > 0 && cleanBarcode === this.lastScannedBarcode && now - this.lastScanTimestamp < this.settings.duplicateScanDelay) {
+      logger.warn(`[ScannerService] Suppressed duplicate scan for '${cleanBarcode}' within ${this.settings.duplicateScanDelay}ms`);
+      return {
+        success: false,
+        barcode: rawBarcode,
+        cleanBarcode,
+        product: null,
+        status: "INVALID",
+        message: `Duplicate scan suppressed (${this.settings.duplicateScanDelay}ms delay active)`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    this.lastScannedBarcode = cleanBarcode;
+    this.lastScanTimestamp = now;
+    if (!cleanBarcode) {
+      return {
+        success: false,
+        barcode: rawBarcode,
+        cleanBarcode: "",
+        product: null,
+        status: "INVALID",
+        message: "Empty or invalid barcode string",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    const product = scannerRepository.findProductByCode(cleanBarcode);
+    let status = "NOT_FOUND";
+    let message = "Product Not Found";
+    if (product) {
+      status = "SUCCESS";
+      message = `Product Found: ${product.name}`;
+    }
+    const record = scannerRepository.saveScanHistory({
+      barcode: cleanBarcode,
+      productId: product?.id || null,
+      productName: product?.name,
+      sku: product?.sku,
+      category: product?.category,
+      price: product?.price,
+      stock: product?.stock,
+      location: product?.location,
+      userId: options.userId || "Customer Admin",
+      deviceName: options.deviceName || "USB HID Scanner",
+      status
+    });
+    logger.info(`[ScannerService] Processed scan for barcode '${cleanBarcode}': Status=${status}`);
+    return {
+      success: status === "SUCCESS",
+      barcode: rawBarcode,
+      cleanBarcode,
+      product,
+      status,
+      message,
+      scanRecord: record,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  getScanHistory(limit = 50) {
+    return scannerRepository.getRecentScanHistory(limit);
+  }
+  clearScanHistory() {
+    return scannerRepository.clearScanHistory();
+  }
+  getAllProducts() {
+    return scannerRepository.getAllProducts();
+  }
+  createProduct(productData) {
+    this.lastScannedBarcode = "";
+    this.lastScanTimestamp = 0;
+    return scannerRepository.createProduct(productData);
+  }
+  updateProduct(id, productData) {
+    this.lastScannedBarcode = "";
+    this.lastScanTimestamp = 0;
+    return scannerRepository.updateProduct(id, productData);
+  }
+  deleteProduct(id) {
+    return scannerRepository.deleteProduct(id);
+  }
+};
+var scannerService = new ScannerService();
+
+// src/main/ipc/scannerIPC.ts
+init_logger();
+function registerScannerIPC(registerHandler) {
+  registerHandler("ipc:scanner:process" /* SCANNER_PROCESS */, async (_evt, payload) => {
+    logger.info("IPC Call: SCANNER_PROCESS", payload);
+    const opts = payload || {};
+    const result = await scannerService.processScan({
+      barcode: opts.barcode || "",
+      userId: opts.userId,
+      deviceName: opts.deviceName,
+      prefix: opts.prefix,
+      suffix: opts.suffix
+    });
+    return {
+      success: true,
+      data: result,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  registerHandler("ipc:scanner:get_history" /* SCANNER_GET_HISTORY */, async (_evt, limitPayload) => {
+    logger.info("IPC Call: SCANNER_GET_HISTORY");
+    const limit = typeof limitPayload === "number" ? limitPayload : 50;
+    const history = scannerService.getScanHistory(limit);
+    return {
+      success: true,
+      data: history,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  registerHandler("ipc:scanner:clear_history" /* SCANNER_CLEAR_HISTORY */, async () => {
+    logger.info("IPC Call: SCANNER_CLEAR_HISTORY");
+    const cleared = scannerService.clearScanHistory();
+    return {
+      success: true,
+      data: cleared,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  registerHandler("ipc:scanner:get_settings" /* SCANNER_GET_SETTINGS */, async () => {
+    logger.info("IPC Call: SCANNER_GET_SETTINGS");
+    const settings = scannerService.getSettings();
+    return {
+      success: true,
+      data: settings,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  registerHandler("ipc:scanner:save_settings" /* SCANNER_SAVE_SETTINGS */, async (_evt, payload) => {
+    logger.info("IPC Call: SCANNER_SAVE_SETTINGS", payload);
+    const updated = scannerService.saveSettings(payload || {});
+    return {
+      success: true,
+      data: updated,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  registerHandler("ipc:scanner:create_product" /* SCANNER_CREATE_PRODUCT */, async (_evt, payload) => {
+    logger.info("IPC Call: SCANNER_CREATE_PRODUCT received payload:", payload);
+    try {
+      const product = scannerService.createProduct(payload || {});
+      logger.info("IPC Call: SCANNER_CREATE_PRODUCT successfully created product:", product);
+      return {
+        success: true,
+        data: product,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: SCANNER_CREATE_PRODUCT failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "CREATE_PRODUCT_FAILED",
+          message: err?.message || "Failed to create product in main process"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:product:get_all" /* PRODUCT_GET_ALL */, async () => {
+    logger.info("IPC Call: PRODUCT_GET_ALL");
+    try {
+      const products = scannerService.getAllProducts();
+      console.log("[TRACE 2] ipcMain PRODUCT_GET_ALL handler returning rows count:", products.length);
+      return {
+        success: true,
+        data: products,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: PRODUCT_GET_ALL failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "GET_ALL_PRODUCTS_FAILED",
+          message: err?.message || "Failed to fetch products from SQLite"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:product:create" /* PRODUCT_CREATE */, async (_evt, payload) => {
+    logger.info("IPC Call: PRODUCT_CREATE payload:", payload);
+    try {
+      const product = scannerService.createProduct(payload || {});
+      return {
+        success: true,
+        data: product,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: PRODUCT_CREATE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "CREATE_PRODUCT_FAILED",
+          message: err?.message || "Failed to create product"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:product:update" /* PRODUCT_UPDATE */, async (_evt, payload) => {
+    logger.info("IPC Call: PRODUCT_UPDATE payload:", payload);
+    try {
+      const { id, product } = payload || {};
+      const updated = scannerService.updateProduct(id, product || {});
+      return {
+        success: true,
+        data: updated,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: PRODUCT_UPDATE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "UPDATE_PRODUCT_FAILED",
+          message: err?.message || "Failed to update product"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:product:delete" /* PRODUCT_DELETE */, async (_evt, payload) => {
+    logger.info("IPC Call: PRODUCT_DELETE payload:", payload);
+    try {
+      const id = typeof payload === "number" ? payload : payload?.id;
+      const success = scannerService.deleteProduct(id);
+      return {
+        success,
+        data: success,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: PRODUCT_DELETE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "DELETE_PRODUCT_FAILED",
+          message: err?.message || "Failed to delete product"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+}
+
+// src/main/database/repositories/CategoryRepository.ts
+init_BaseRepository();
+init_connection();
+var CategoryRepository = class extends BaseRepository {
+  constructor() {
+    super(...arguments);
+    this.tableName = "categories";
+  }
+  findAllCategories(includeInactive = false) {
+    try {
+      const sql = includeInactive ? `SELECT * FROM categories ORDER BY sort_order ASC, name ASC;` : `SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC;`;
+      const rows = dbConnection.all(sql);
+      return rows.map((r) => this.mapRowToCategory(r));
+    } catch (err) {
+      console.error("[CategoryRepository] findAllCategories error:", err);
+      return [];
+    }
+  }
+  findCategoryById(id) {
+    try {
+      const row = dbConnection.get(`SELECT * FROM categories WHERE id = ? LIMIT 1;`, [id]);
+      return row ? this.mapRowToCategory(row) : null;
+    } catch (err) {
+      console.error("[CategoryRepository] findCategoryById error:", err);
+      return null;
+    }
+  }
+  findCategoryByName(name) {
+    try {
+      const row = dbConnection.get(
+        `SELECT * FROM categories WHERE LOWER(name) = LOWER(?) LIMIT 1;`,
+        [name.trim()]
+      );
+      return row ? this.mapRowToCategory(row) : null;
+    } catch (err) {
+      console.error("[CategoryRepository] findCategoryByName error:", err);
+      return null;
+    }
+  }
+  createCategory(payload) {
+    const trimmedName = payload.name.trim();
+    if (!trimmedName) {
+      throw new Error("Category name is required.");
+    }
+    const existing = this.findCategoryByName(trimmedName);
+    if (existing) {
+      throw new Error(`Category "${trimmedName}" already exists.`);
+    }
+    const sortOrder = payload.sortOrder !== void 0 ? payload.sortOrder : 0;
+    const isActive = payload.isActive !== false ? 1 : 0;
+    const description = payload.description?.trim() || "";
+    const createdBy = payload.createdBy || "SYSTEM";
+    const res = dbConnection.run(
+      `INSERT INTO categories (name, description, sort_order, is_active, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?);`,
+      [trimmedName, description, sortOrder, isActive, createdBy, createdBy]
+    );
+    const insertedId = Number(res.lastInsertRowid);
+    const created = this.findCategoryById(insertedId);
+    if (!created) {
+      throw new Error("Failed to retrieve newly created category.");
+    }
+    return created;
+  }
+  updateCategory(id, payload) {
+    const existing = this.findCategoryById(id);
+    if (!existing) {
+      throw new Error(`Category with ID ${id} not found.`);
+    }
+    let name = existing.name;
+    if (payload.name !== void 0) {
+      const trimmedName = payload.name.trim();
+      if (!trimmedName) {
+        throw new Error("Category name cannot be empty.");
+      }
+      const dup = dbConnection.get(
+        `SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND id != ? LIMIT 1;`,
+        [trimmedName, id]
+      );
+      if (dup) {
+        throw new Error(`Category name "${trimmedName}" already exists.`);
+      }
+      name = trimmedName;
+    }
+    const description = payload.description !== void 0 ? payload.description.trim() : existing.description || "";
+    const sortOrder = payload.sortOrder !== void 0 ? payload.sortOrder : existing.sortOrder;
+    const isActive = payload.isActive !== void 0 ? payload.isActive ? 1 : 0 : existing.isActive ? 1 : 0;
+    const updatedBy = payload.updatedBy || "SYSTEM";
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    dbConnection.run(
+      `UPDATE categories
+       SET name = ?, description = ?, sort_order = ?, is_active = ?, updated_by = ?, updated_at = ?
+       WHERE id = ?;`,
+      [name, description, sortOrder, isActive, updatedBy, now, id]
+    );
+    const updated = this.findCategoryById(id);
+    if (!updated) {
+      throw new Error("Failed to retrieve updated category.");
+    }
+    return updated;
+  }
+  deleteCategory(id) {
+    const existing = this.findCategoryById(id);
+    if (!existing) {
+      return false;
+    }
+    const res = dbConnection.run(`DELETE FROM categories WHERE id = ?;`, [id]);
+    return res.changes > 0;
+  }
+  mapRowToCategory(r) {
+    return {
+      id: r.id,
+      name: r.name,
+      description: r.description || "",
+      sortOrder: r.sort_order ?? 0,
+      isActive: Boolean(r.is_active),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      createdBy: r.created_by,
+      updatedBy: r.updated_by
+    };
+  }
+};
+var categoryRepository = new CategoryRepository();
+
+// src/main/ipc/categoryIPC.ts
+init_logger();
+function registerCategoryIPC(registerHandler) {
+  registerHandler("ipc:category:get_all" /* CATEGORY_GET_ALL */, async () => {
+    logger.info("IPC Call: CATEGORY_GET_ALL");
+    try {
+      const categories = categoryRepository.findAllCategories();
+      return {
+        success: true,
+        data: categories,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: CATEGORY_GET_ALL failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "GET_CATEGORIES_FAILED",
+          message: err?.message || "Failed to fetch categories"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:category:create" /* CATEGORY_CREATE */, async (_evt, payload) => {
+    logger.info("IPC Call: CATEGORY_CREATE", payload);
+    try {
+      const p = payload || {};
+      const userRole = p.userRole || p.role;
+      if (userRole === "USER" || userRole === "OPERATOR" || userRole === "VIEWER") {
+        return {
+          success: false,
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "Insufficient permissions. Users have read-only access to categories."
+          },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const created = categoryRepository.createCategory({
+        name: p.name,
+        description: p.description,
+        sortOrder: p.sortOrder,
+        isActive: p.isActive,
+        createdBy: p.createdBy || p.username || "SYSTEM"
+      });
+      return {
+        success: true,
+        data: created,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: CATEGORY_CREATE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "CREATE_CATEGORY_FAILED",
+          message: err?.message || "Failed to create category"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:category:update" /* CATEGORY_UPDATE */, async (_evt, payload) => {
+    logger.info("IPC Call: CATEGORY_UPDATE", payload);
+    try {
+      const p = payload || {};
+      const { id, category, userRole, role } = p;
+      const effectiveRole = userRole || role;
+      if (effectiveRole === "USER" || effectiveRole === "OPERATOR" || effectiveRole === "VIEWER") {
+        return {
+          success: false,
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "Insufficient permissions. Users cannot update categories."
+          },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const updated = categoryRepository.updateCategory(id, category || p);
+      return {
+        success: true,
+        data: updated,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: CATEGORY_UPDATE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "UPDATE_CATEGORY_FAILED",
+          message: err?.message || "Failed to update category"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:category:delete" /* CATEGORY_DELETE */, async (_evt, payload) => {
+    logger.info("IPC Call: CATEGORY_DELETE", payload);
+    try {
+      const p = payload || {};
+      const id = typeof payload === "number" ? payload : p.id;
+      const effectiveRole = p.userRole || p.role;
+      if (effectiveRole && effectiveRole !== "OWNER") {
+        return {
+          success: false,
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "Insufficient permissions. Only Owner can delete categories."
+          },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const deleted = categoryRepository.deleteCategory(id);
+      return {
+        success: true,
+        data: deleted,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: CATEGORY_DELETE failed:", err);
+      return {
+        success: false,
+        error: {
+          code: "DELETE_CATEGORY_FAILED",
+          message: err?.message || "Failed to delete category"
+        },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+}
+
+// src/main/database/repositories/BaseMasterRepository.ts
+init_connection();
+
+// src/shared/masterTypes.ts
+var MASTER_MODULE_CONFIGS = {
+  categories: {
+    moduleName: "categories",
+    singularName: "Category",
+    pluralName: "Categories",
+    description: "Product and inventory category classification",
+    codePrefix: "CAT",
+    tableName: "master_categories"
+  },
+  units: {
+    moduleName: "units",
+    singularName: "Unit",
+    pluralName: "Units of Measure",
+    description: "Units of measurement for stock tracking (e.g., PCS, KG, BOX)",
+    codePrefix: "UOM",
+    tableName: "master_units"
+  },
+  brands: {
+    moduleName: "brands",
+    singularName: "Brand",
+    pluralName: "Brands",
+    description: "Product brand and manufacturer designations",
+    codePrefix: "BRD",
+    tableName: "master_brands"
+  },
+  warehouses: {
+    moduleName: "warehouses",
+    singularName: "Warehouse",
+    pluralName: "Warehouses",
+    description: "Physical storage locations and distribution centers",
+    codePrefix: "WHS",
+    tableName: "master_warehouses"
+  },
+  suppliers: {
+    moduleName: "suppliers",
+    singularName: "Supplier",
+    pluralName: "Suppliers",
+    description: "Vendors and supply chain partners",
+    codePrefix: "SUP",
+    tableName: "master_suppliers"
+  }
+};
+
+// src/main/database/repositories/BaseMasterRepository.ts
+var import_crypto2 = __toESM(require("crypto"), 1);
+var BaseMasterRepository = class {
+  constructor(moduleName) {
+    this.moduleName = moduleName;
+    this.tableName = MASTER_MODULE_CONFIGS[moduleName].tableName;
+  }
+  mapRowToEntity(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      description: row.description || "",
+      sortOrder: row.sort_order ?? 0,
+      isActive: Boolean(row.is_active),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdBy: row.created_by || "SYSTEM",
+      updatedBy: row.updated_by || "SYSTEM"
+    };
+  }
+  getAll(includeInactive = true) {
+    try {
+      const sql = includeInactive ? `SELECT * FROM ${this.tableName} ORDER BY sort_order ASC, name ASC;` : `SELECT * FROM ${this.tableName} WHERE is_active = 1 ORDER BY sort_order ASC, name ASC;`;
+      const rows = dbConnection.all(sql);
+      return rows.map((r) => this.mapRowToEntity(r));
+    } catch (err) {
+      console.error(`[BaseMasterRepository:${this.tableName}] getAll error:`, err);
+      return [];
+    }
+  }
+  getActive() {
+    return this.getAll(false);
+  }
+  findById(id) {
+    try {
+      const row = dbConnection.get(
+        `SELECT * FROM ${this.tableName} WHERE id = ? LIMIT 1;`,
+        [id]
+      );
+      return row ? this.mapRowToEntity(row) : null;
+    } catch (err) {
+      console.error(`[BaseMasterRepository:${this.tableName}] findById error:`, err);
+      return null;
+    }
+  }
+  findByName(name) {
+    if (!name) return null;
+    try {
+      const row = dbConnection.get(
+        `SELECT * FROM ${this.tableName} WHERE LOWER(name) = LOWER(?) LIMIT 1;`,
+        [name.trim()]
+      );
+      return row ? this.mapRowToEntity(row) : null;
+    } catch (err) {
+      console.error(`[BaseMasterRepository:${this.tableName}] findByName error:`, err);
+      return null;
+    }
+  }
+  findByCode(code) {
+    if (!code) return null;
+    try {
+      const row = dbConnection.get(
+        `SELECT * FROM ${this.tableName} WHERE LOWER(code) = LOWER(?) LIMIT 1;`,
+        [code.trim()]
+      );
+      return row ? this.mapRowToEntity(row) : null;
+    } catch (err) {
+      console.error(`[BaseMasterRepository:${this.tableName}] findByCode error:`, err);
+      return null;
+    }
+  }
+  checkDuplicate(name, code, excludeId) {
+    const trimmedName = (name || "").trim();
+    const trimmedCode = (code || "").trim();
+    let nameSql = `SELECT id FROM ${this.tableName} WHERE LOWER(name) = LOWER(?)`;
+    let codeSql = `SELECT id FROM ${this.tableName} WHERE LOWER(code) = LOWER(?)`;
+    const nameParams = [trimmedName];
+    const codeParams = [trimmedCode];
+    if (excludeId) {
+      nameSql += ` AND id != ?`;
+      codeSql += ` AND id != ?`;
+      nameParams.push(excludeId);
+      codeParams.push(excludeId);
+    }
+    nameSql += ` LIMIT 1;`;
+    codeSql += ` LIMIT 1;`;
+    const nameMatch = dbConnection.get(nameSql, nameParams);
+    const codeMatch = dbConnection.get(codeSql, codeParams);
+    return {
+      nameExists: Boolean(nameMatch),
+      codeExists: Boolean(codeMatch)
+    };
+  }
+  create(payload, userContext) {
+    const trimmedName = (payload.name || "").trim();
+    const trimmedCode = (payload.code || "").trim().toUpperCase();
+    if (!trimmedName) {
+      throw new Error(`${MASTER_MODULE_CONFIGS[this.moduleName].singularName} name is required.`);
+    }
+    if (!trimmedCode) {
+      throw new Error(`${MASTER_MODULE_CONFIGS[this.moduleName].singularName} code is required.`);
+    }
+    const dup = this.checkDuplicate(trimmedName, trimmedCode);
+    if (dup.nameExists) {
+      throw new Error(`Name "${trimmedName}" already exists.`);
+    }
+    if (dup.codeExists) {
+      throw new Error(`Code "${trimmedCode}" already exists.`);
+    }
+    const uuid = import_crypto2.default.randomUUID ? import_crypto2.default.randomUUID() : `${this.moduleName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const description = (payload.description || "").trim();
+    const sortOrder = payload.sortOrder !== void 0 ? Number(payload.sortOrder) : 0;
+    const isActive = payload.isActive !== false ? 1 : 0;
+    const username = userContext?.username || "SYSTEM";
+    const role = userContext?.role || "ADMIN";
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    dbConnection.run(
+      `INSERT INTO ${this.tableName} (id, name, code, description, sort_order, is_active, created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      [uuid, trimmedName, trimmedCode, description, sortOrder, isActive, now, now, username, username]
+    );
+    const created = this.findById(uuid);
+    if (!created) {
+      throw new Error(`Failed to create ${MASTER_MODULE_CONFIGS[this.moduleName].singularName}.`);
+    }
+    try {
+      auditRepository.logAction({
+        username,
+        role,
+        action: `MASTER_CREATE_${this.moduleName.toUpperCase()}`,
+        category: "MASTER_DATA",
+        details: `Created ${MASTER_MODULE_CONFIGS[this.moduleName].singularName}: ${created.name} (${created.code}) [ID: ${created.id}]`,
+        ip_address: userContext?.ipAddress || "127.0.0.1"
+      });
+    } catch (auditErr) {
+      console.error("Audit logging failed:", auditErr);
+    }
+    return created;
+  }
+  update(id, payload, userContext) {
+    const existing = this.findById(id);
+    if (!existing) {
+      throw new Error(`${MASTER_MODULE_CONFIGS[this.moduleName].singularName} with ID "${id}" not found.`);
+    }
+    let name = existing.name;
+    let code = existing.code;
+    if (payload.name !== void 0) {
+      const trimmedName = payload.name.trim();
+      if (!trimmedName) throw new Error("Name cannot be empty.");
+      name = trimmedName;
+    }
+    if (payload.code !== void 0) {
+      const trimmedCode = payload.code.trim().toUpperCase();
+      if (!trimmedCode) throw new Error("Code cannot be empty.");
+      code = trimmedCode;
+    }
+    const dup = this.checkDuplicate(name, code, id);
+    if (payload.name !== void 0 && dup.nameExists) {
+      throw new Error(`Name "${name}" already exists.`);
+    }
+    if (payload.code !== void 0 && dup.codeExists) {
+      throw new Error(`Code "${code}" already exists.`);
+    }
+    const description = payload.description !== void 0 ? payload.description.trim() : existing.description;
+    const sortOrder = payload.sortOrder !== void 0 ? Number(payload.sortOrder) : existing.sortOrder;
+    const isActive = payload.isActive !== void 0 ? payload.isActive ? 1 : 0 : existing.isActive ? 1 : 0;
+    const username = userContext?.username || "SYSTEM";
+    const role = userContext?.role || "ADMIN";
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    dbConnection.run(
+      `UPDATE ${this.tableName}
+       SET name = ?, code = ?, description = ?, sort_order = ?, is_active = ?, updated_at = ?, updated_by = ?
+       WHERE id = ?;`,
+      [name, code, description, sortOrder, isActive, now, username, id]
+    );
+    const updated = this.findById(id);
+    if (!updated) {
+      throw new Error(`Failed to update ${MASTER_MODULE_CONFIGS[this.moduleName].singularName}.`);
+    }
+    try {
+      auditRepository.logAction({
+        username,
+        role,
+        action: `MASTER_UPDATE_${this.moduleName.toUpperCase()}`,
+        category: "MASTER_DATA",
+        details: `Updated ${MASTER_MODULE_CONFIGS[this.moduleName].singularName}: ${updated.name} (${updated.code}) [ID: ${updated.id}]`,
+        ip_address: userContext?.ipAddress || "127.0.0.1"
+      });
+    } catch (auditErr) {
+      console.error("Audit logging failed:", auditErr);
+    }
+    return updated;
+  }
+  enable(id, userContext) {
+    return this.update(id, { isActive: true }, userContext);
+  }
+  disable(id, userContext) {
+    return this.update(id, { isActive: false }, userContext);
+  }
+  delete(id, userContext) {
+    const existing = this.findById(id);
+    if (!existing) return false;
+    dbConnection.run(`DELETE FROM ${this.tableName} WHERE id = ?;`, [id]);
+    const username = userContext?.username || "SYSTEM";
+    const role = userContext?.role || "OWNER";
+    try {
+      auditRepository.logAction({
+        username,
+        role,
+        action: `MASTER_DELETE_${this.moduleName.toUpperCase()}`,
+        category: "MASTER_DATA",
+        details: `Deleted ${MASTER_MODULE_CONFIGS[this.moduleName].singularName}: ${existing.name} (${existing.code}) [ID: ${existing.id}]`,
+        ip_address: userContext?.ipAddress || "127.0.0.1"
+      });
+    } catch (auditErr) {
+      console.error("Audit logging failed:", auditErr);
+    }
+    return true;
+  }
+};
+var categoryMasterRepository = new BaseMasterRepository("categories");
+var unitMasterRepository = new BaseMasterRepository("units");
+var brandMasterRepository = new BaseMasterRepository("brands");
+var warehouseMasterRepository = new BaseMasterRepository("warehouses");
+var supplierMasterRepository = new BaseMasterRepository("suppliers");
+var MASTER_REPOSITORIES = {
+  categories: categoryMasterRepository,
+  units: unitMasterRepository,
+  brands: brandMasterRepository,
+  warehouses: warehouseMasterRepository,
+  suppliers: supplierMasterRepository
+};
+
+// src/main/ipc/masterIPC.ts
+init_logger();
+function extractModuleName(payload) {
+  if (typeof payload === "string") return payload;
+  if (payload && typeof payload === "object") {
+    const p = payload;
+    if (typeof p.moduleName === "string") return p.moduleName;
+    if (p.moduleName && typeof p.moduleName === "object" && typeof p.moduleName.moduleName === "string") {
+      return p.moduleName.moduleName;
+    }
+  }
+  return "categories";
+}
+function registerMasterIPC(registerHandler) {
+  registerHandler("ipc:master:get_all" /* MASTER_GET_ALL */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_GET_ALL", payload);
+    try {
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const items = repo.getAll(true);
+      return {
+        success: true,
+        data: items,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_GET_ALL failed:", err);
+      return {
+        success: false,
+        error: { code: "GET_ALL_FAILED", message: err?.message || "Failed to fetch master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:get_active" /* MASTER_GET_ACTIVE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_GET_ACTIVE", payload);
+    try {
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const items = repo.getActive();
+      return {
+        success: true,
+        data: items,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_GET_ACTIVE failed:", err);
+      return {
+        success: false,
+        error: { code: "GET_ACTIVE_FAILED", message: err?.message || "Failed to fetch active master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:create" /* MASTER_CREATE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_CREATE", payload);
+    try {
+      const p = payload || {};
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || "USER").toString().toUpperCase();
+      const username = p.username || p.payload?.username || "SYSTEM";
+      if (role === "USER" || role === "OPERATOR" || role === "VIEWER") {
+        return {
+          success: false,
+          error: { code: "PERMISSION_DENIED", message: "Read-only access. Insufficient permissions to create master data." },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const createPayload = {
+        name: p.name || p.payload?.name,
+        code: p.code || p.payload?.code,
+        description: p.description || p.payload?.description,
+        sortOrder: p.sortOrder !== void 0 ? p.sortOrder : p.payload?.sortOrder,
+        isActive: p.isActive !== void 0 ? p.isActive : p.payload?.isActive
+      };
+      const created = repo.create(createPayload, {
+        username,
+        role
+      });
+      return {
+        success: true,
+        data: created,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_CREATE failed:", err);
+      return {
+        success: false,
+        error: { code: "CREATE_FAILED", message: err?.message || "Failed to create master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:update" /* MASTER_UPDATE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_UPDATE", payload);
+    try {
+      const p = payload || {};
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || "USER").toString().toUpperCase();
+      const username = p.username || p.payload?.username || "SYSTEM";
+      if (role === "USER" || role === "OPERATOR" || role === "VIEWER") {
+        return {
+          success: false,
+          error: { code: "PERMISSION_DENIED", message: "Read-only access. Insufficient permissions to update master data." },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const updatePayload = p.payload || {
+        name: p.name,
+        code: p.code,
+        description: p.description,
+        sortOrder: p.sortOrder,
+        isActive: p.isActive
+      };
+      const updated = repo.update(p.id, updatePayload, {
+        username,
+        role
+      });
+      return {
+        success: true,
+        data: updated,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_UPDATE failed:", err);
+      return {
+        success: false,
+        error: { code: "UPDATE_FAILED", message: err?.message || "Failed to update master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:enable" /* MASTER_ENABLE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_ENABLE", payload);
+    try {
+      const p = payload || {};
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || "USER").toString().toUpperCase();
+      const username = p.username || p.payload?.username || "SYSTEM";
+      if (role === "USER" || role === "OPERATOR" || role === "VIEWER") {
+        return {
+          success: false,
+          error: { code: "PERMISSION_DENIED", message: "Read-only access. Insufficient permissions to enable master data." },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const enabled = repo.enable(p.id, { username, role });
+      return {
+        success: true,
+        data: enabled,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_ENABLE failed:", err);
+      return {
+        success: false,
+        error: { code: "ENABLE_FAILED", message: err?.message || "Failed to enable master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:disable" /* MASTER_DISABLE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_DISABLE", payload);
+    try {
+      const p = payload || {};
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || "USER").toString().toUpperCase();
+      const username = p.username || p.payload?.username || "SYSTEM";
+      if (role === "USER" || role === "OPERATOR" || role === "VIEWER") {
+        return {
+          success: false,
+          error: { code: "PERMISSION_DENIED", message: "Read-only access. Insufficient permissions to disable master data." },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const disabled = repo.disable(p.id, { username, role });
+      return {
+        success: true,
+        data: disabled,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_DISABLE failed:", err);
+      return {
+        success: false,
+        error: { code: "DISABLE_FAILED", message: err?.message || "Failed to disable master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+  registerHandler("ipc:master:delete" /* MASTER_DELETE */, async (_evt, payload) => {
+    logger.info("IPC Call: MASTER_DELETE", payload);
+    try {
+      const p = payload || {};
+      const moduleName = extractModuleName(payload);
+      const repo = MASTER_REPOSITORIES[moduleName];
+      if (!repo) {
+        return {
+          success: false,
+          error: { code: "INVALID_MODULE", message: `Master module "${moduleName}" not found.` },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const role = (p.userRole || p.role || p.payload?.userRole || p.payload?.role || "USER").toString().toUpperCase();
+      const username = p.username || p.payload?.username || "SYSTEM";
+      if (role !== "OWNER" && role !== "ADMIN") {
+        return {
+          success: false,
+          error: { code: "PERMISSION_DENIED", message: "Insufficient permissions to delete master data records." },
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      const deleted = repo.delete(p.id, { username, role });
+      return {
+        success: true,
+        data: deleted,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch (err) {
+      logger.error("IPC Call: MASTER_DELETE failed:", err);
+      return {
+        success: false,
+        error: { code: "DELETE_FAILED", message: err?.message || "Failed to delete master data." },
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+  });
+}
+
 // src/main/ipc/index.ts
 init_logger();
 function registerAllIPCHandlers(registerHandler) {
@@ -5150,6 +6820,9 @@ function registerAllIPCHandlers(registerHandler) {
   registerBarcodeIPC(registerHandler);
   registerAuthIPC(registerHandler);
   registerTemplateIPC(registerHandler);
+  registerScannerIPC(registerHandler);
+  registerCategoryIPC(registerHandler);
+  registerMasterIPC(registerHandler);
   logger.info("IPC Channel Registration Complete.");
 }
 
@@ -5320,7 +6993,7 @@ var MainApplication = class {
           title: winConfig.title,
           webPreferences: {
             contextIsolation: true,
-            sandbox: true,
+            sandbox: false,
             nodeIntegration: false,
             preload: import_path6.default.join(__dirname, "../preload/index.cjs")
           }
